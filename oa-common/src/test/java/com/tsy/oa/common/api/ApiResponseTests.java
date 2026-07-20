@@ -1,5 +1,6 @@
 package com.tsy.oa.common.api;
 
+import com.tsy.oa.common.error.CommonErrorCode;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,6 +23,15 @@ class ApiResponseTests {
 
         assertEquals(40001, response.code());
         assertEquals("invalid request", response.message());
+        assertNull(response.data());
+    }
+
+    @Test
+    void failureResponseCanBeCreatedFromErrorCode() {
+        ApiResponse<Void> response = ApiResponse.failure(CommonErrorCode.FORBIDDEN);
+
+        assertEquals(40300, response.code());
+        assertEquals("无权访问", response.message());
         assertNull(response.data());
     }
 }

@@ -1,5 +1,7 @@
 package com.tsy.oa.common.api;
 
+import com.tsy.oa.common.error.ErrorCode;
+
 public record ApiResponse<T>(int code, String message, T data) {
 
     public static <T> ApiResponse<T> success(T data) {
@@ -8,5 +10,9 @@ public record ApiResponse<T>(int code, String message, T data) {
 
     public static <T> ApiResponse<T> failure(int code, String message) {
         return new ApiResponse<>(code, message, null);
+    }
+
+    public static <T> ApiResponse<T> failure(ErrorCode errorCode) {
+        return failure(errorCode.code(), errorCode.message());
     }
 }
