@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS department;
+
+CREATE TABLE department (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    parent_id BIGINT NOT NULL DEFAULT 0,
+    name VARCHAR(100) NOT NULL,
+    leader_employee_id BIGINT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    status TINYINT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_department_name UNIQUE (name)
+);
