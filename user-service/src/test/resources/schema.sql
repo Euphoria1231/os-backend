@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS employee;
+DROP TABLE IF EXISTS position;
 DROP TABLE IF EXISTS department;
 
 CREATE TABLE department (
@@ -10,4 +12,33 @@ CREATE TABLE department (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_department_name UNIQUE (name)
+);
+
+CREATE TABLE position (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(500) NULL,
+    status TINYINT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_position_code UNIQUE (code)
+);
+
+CREATE TABLE employee (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    employee_no VARCHAR(50) NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(100) NOT NULL,
+    real_name VARCHAR(100) NOT NULL,
+    department_id BIGINT NOT NULL,
+    position_id BIGINT NOT NULL,
+    leader_id BIGINT NULL,
+    phone VARCHAR(30) NULL,
+    email VARCHAR(100) NULL,
+    status TINYINT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_employee_no UNIQUE (employee_no),
+    CONSTRAINT uk_employee_username UNIQUE (username)
 );

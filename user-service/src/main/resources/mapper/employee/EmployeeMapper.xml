@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.user.employee.mapper.EmployeeMapper">
+    <resultMap id="EmployeeResultMap" type="com.tsy.oa.user.employee.model.Employee">
+        <id property="id" column="id"/>
+        <result property="employeeNo" column="employee_no"/>
+        <result property="username" column="username"/>
+        <result property="passwordHash" column="password_hash"/>
+        <result property="realName" column="real_name"/>
+        <result property="departmentId" column="department_id"/>
+        <result property="departmentName" column="department_name"/>
+        <result property="positionId" column="position_id"/>
+        <result property="positionName" column="position_name"/>
+        <result property="leaderId" column="leader_id"/>
+        <result property="leaderName" column="leader_name"/>
+        <result property="phone" column="phone"/>
+        <result property="email" column="email"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="EmployeeColumns">
+        e.id, e.employee_no, e.username, e.password_hash, e.real_name,
+        e.department_id, d.name AS department_name,
+        e.position_id, p.name AS position_name,
+        e.leader_id, l.real_name AS leader_name,
+        e.phone, e.email, e.status, e.created_at, e.updated_at
+    </sql>
+
+    <sql id="EmployeeJoins">
+        FROM employee e
+        LEFT JOIN department d ON d.id = e.department_id
+        LEFT JOIN position p ON p.id = e.position_id
+        LEFT JOIN employee l ON l.id = e.leader_id
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO employee (
+            employee_no, username, password_hash, real_name, department_id,
+            position_id, leader_id, phone, email, status
+        ) VALUES (
+            #{employeeNo}, #{username}, #{passwordHash}, #{realName}, #{departmentId},
+            #{positionId}, #{leaderId}, #{phone}, #{email}, #{status}
+        )
+    </insert>
+
+    <select id="findById" resultMap="EmployeeResultMap">
+        SELECT <include refid="EmployeeColumns"/>
+        <include refid="EmployeeJoins"/>
+        WHERE e.id = #{id}
+    </select>
+
+    <select id="findByUsername" resultMap="EmployeeResultMap">
+        SELECT <include refid="EmployeeColumns"/>
+        <include refid="EmployeeJoins"/>
+        WHERE e.username = #{username}
+    </select>
+
+    <select id="findAll" resultMap="EmployeeResultMap">
+        SELECT <include refid="EmployeeColumns"/>
+        <include refid="EmployeeJoins"/>
+        ORDER BY e.id
+    </select>
+
+    <update id="update">
+        UPDATE employee
+        SET real_name = #{realName}, department_id = #{departmentId}, position_id = #{positionId},
+            leader_id = #{leaderId}, phone = #{phone}, email = #{email}, status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">DELETE FROM employee WHERE id = #{id}</delete>
+
+    <select id="countByEmployeeNo" resultType="int">
+        SELECT COUNT(*) FROM employee WHERE employee_no = #{employeeNo}
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <select id="countByUsername" resultType="int">
+        SELECT COUNT(*) FROM employee WHERE username = #{username}
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+</mapper>

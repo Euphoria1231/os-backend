@@ -87,6 +87,13 @@ class DepartmentControllerTests {
                 .andExpect(jsonPath("$.code").value(40901));
     }
 
+    @Test
+    void unknownEndpointReturnsNotFoundResponse() throws Exception {
+        mockMvc.perform(get("/api/user/unknown"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40400));
+    }
+
     private long createDepartment(String name) throws Exception {
         String response = mockMvc.perform(post("/api/user/departments")
                         .contentType(MediaType.APPLICATION_JSON)
