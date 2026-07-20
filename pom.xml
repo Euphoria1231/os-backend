@@ -22,6 +22,7 @@
 
 	<modules>
 		<module>oa-common</module>
+		<module>oa-gateway</module>
 	</modules>
 
 	<properties>
