@@ -4,6 +4,9 @@ import com.tsy.oa.common.error.ErrorCode;
 
 public enum UserErrorCode implements ErrorCode {
 
+    INVALID_CREDENTIALS(40101, "账号或密码错误"),
+    TOKEN_INVALID(40102, "登录状态无效或已过期"),
+    EMPLOYEE_DISABLED(40301, "员工账号已禁用"),
     DEPARTMENT_NOT_FOUND(40401, "部门不存在"),
     POSITION_NOT_FOUND(40402, "岗位不存在"),
     EMPLOYEE_NOT_FOUND(40403, "员工不存在"),

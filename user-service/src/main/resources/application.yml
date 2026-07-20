@@ -35,3 +35,8 @@ management:
     web:
       exposure:
         include: health,info
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:oa-course-demo-jwt-secret-key-change-before-production-2026}
+    validity: ${JWT_VALIDITY:PT2H}

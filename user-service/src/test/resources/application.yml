@@ -22,3 +22,8 @@ mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+security:
+  jwt:
+    secret: test-jwt-secret-key-with-at-least-thirty-two-bytes
+    validity: PT1H
