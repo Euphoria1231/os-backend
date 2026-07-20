@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.user.rbac.mapper.RbacMapper">
+
+    <resultMap id="RoleResultMap" type="com.tsy.oa.user.rbac.model.Role">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="MenuResultMap" type="com.tsy.oa.user.rbac.model.Menu">
+        <id property="id" column="id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="name" column="name"/>
+        <result property="path" column="path"/>
+        <result property="component" column="component"/>
+        <result property="permission" column="permission"/>
+        <result property="type" column="type"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="ApiPermissionResultMap" type="com.tsy.oa.user.rbac.model.ApiPermission">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="httpMethod" column="http_method"/>
+        <result property="pathPattern" column="path_pattern"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insertRole" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_role (code, name, status)
+        VALUES (#{code}, #{name}, #{status})
+    </insert>
+
+    <select id="findRoleById" resultMap="RoleResultMap">
+        SELECT id, code, name, status, created_at, updated_at
+        FROM sys_role WHERE id = #{id}
+    </select>
+
+    <select id="findAllRoles" resultMap="RoleResultMap">
+        SELECT id, code, name, status, created_at, updated_at
+        FROM sys_role ORDER BY id
+    </select>
+
+    <update id="updateRole">
+        UPDATE sys_role
+        SET code = #{code}, name = #{name}, status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteRoleById">DELETE FROM sys_role WHERE id = #{id}</delete>
+
+    <select id="countRoleByCode" resultType="int">
+        SELECT COUNT(*) FROM sys_role WHERE code = #{code}
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <insert id="insertMenu" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_menu (
+            parent_id, name, path, component, permission, type, sort_order, status
+        ) VALUES (
+            #{parentId}, #{name}, #{path}, #{component}, #{permission}, #{type}, #{sortOrder}, #{status}
+        )
+    </insert>
+
+    <select id="findMenuById" resultMap="MenuResultMap">
+        SELECT id, parent_id, name, path, component, permission, type,
+               sort_order, status, created_at, updated_at
+        FROM sys_menu WHERE id = #{id}
+    </select>
+
+    <select id="findAllMenus" resultMap="MenuResultMap">
+        SELECT id, parent_id, name, path, component, permission, type,
+               sort_order, status, created_at, updated_at
+        FROM sys_menu ORDER BY sort_order, id
+    </select>
+
+    <update id="updateMenu">
+        UPDATE sys_menu
+        SET parent_id = #{parentId}, name = #{name}, path = #{path}, component = #{component},
+            permission = #{permission}, type = #{type}, sort_order = #{sortOrder},
+            status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteMenuById">DELETE FROM sys_menu WHERE id = #{id}</delete>
+
+    <insert id="insertApiPermission" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_api_permission (code, name, http_method, path_pattern, status)
+        VALUES (#{code}, #{name}, #{httpMethod}, #{pathPattern}, #{status})
+    </insert>
+
+    <select id="findApiPermissionById" resultMap="ApiPermissionResultMap">
+        SELECT id, code, name, http_method, path_pattern, status, created_at, updated_at
+        FROM sys_api_permission WHERE id = #{id}
+    </select>
+
+    <select id="findAllApiPermissions" resultMap="ApiPermissionResultMap">
+        SELECT id, code, name, http_method, path_pattern, status, created_at, updated_at
+        FROM sys_api_permission ORDER BY id
+    </select>
+
+    <update id="updateApiPermission">
+        UPDATE sys_api_permission
+        SET code = #{code}, name = #{name}, http_method = #{httpMethod},
+            path_pattern = #{pathPattern}, status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteApiPermissionById">DELETE FROM sys_api_permission WHERE id = #{id}</delete>
+
+    <select id="countApiPermissionByCode" resultType="int">
+        SELECT COUNT(*) FROM sys_api_permission WHERE code = #{code}
+        <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <insert id="insertRoleMenu">
+        INSERT INTO role_menu (role_id, menu_id) VALUES (#{roleId}, #{menuId})
+    </insert>
+
+    <delete id="deleteRoleMenus">DELETE FROM role_menu WHERE role_id = #{roleId}</delete>
+    <delete id="deleteMenuRoles">DELETE FROM role_menu WHERE menu_id = #{menuId}</delete>
+
+    <insert id="insertRoleApiPermission">
+        INSERT INTO role_api_permission (role_id, api_permission_id)
+        VALUES (#{roleId}, #{apiPermissionId})
+    </insert>
+
+    <delete id="deleteRoleApiPermissions">
+        DELETE FROM role_api_permission WHERE role_id = #{roleId}
+    </delete>
+
+    <delete id="deleteApiPermissionRoles">
+        DELETE FROM role_api_permission WHERE api_permission_id = #{apiPermissionId}
+    </delete>
+
+    <insert id="insertEmployeeRole">
+        INSERT INTO employee_role (employee_id, role_id) VALUES (#{employeeId}, #{roleId})
+    </insert>
+
+    <delete id="deleteEmployeeRoles">DELETE FROM employee_role WHERE employee_id = #{employeeId}</delete>
+    <delete id="deleteRoleEmployees">DELETE FROM employee_role WHERE role_id = #{roleId}</delete>
+
+    <select id="findRolesByEmployeeId" resultMap="RoleResultMap">
+        SELECT DISTINCT r.id, r.code, r.name, r.status, r.created_at, r.updated_at
+        FROM sys_role r
+        INNER JOIN employee_role er ON er.role_id = r.id
+        WHERE er.employee_id = #{employeeId} AND r.status = 1
+        ORDER BY r.id
+    </select>
+
+    <select id="findMenusByEmployeeId" resultMap="MenuResultMap">
+        SELECT DISTINCT m.id, m.parent_id, m.name, m.path, m.component, m.permission,
+                        m.type, m.sort_order, m.status, m.created_at, m.updated_at
+        FROM sys_menu m
+        INNER JOIN role_menu rm ON rm.menu_id = m.id
+        INNER JOIN employee_role er ON er.role_id = rm.role_id
+        INNER JOIN sys_role r ON r.id = er.role_id
+        WHERE er.employee_id = #{employeeId} AND r.status = 1 AND m.status = 1
+        ORDER BY m.sort_order, m.id
+    </select>
+
+    <select id="findApiPermissionsByEmployeeId" resultMap="ApiPermissionResultMap">
+        SELECT DISTINCT p.id, p.code, p.name, p.http_method, p.path_pattern,
+                        p.status, p.created_at, p.updated_at
+        FROM sys_api_permission p
+        INNER JOIN role_api_permission rp ON rp.api_permission_id = p.id
+        INNER JOIN employee_role er ON er.role_id = rp.role_id
+        INNER JOIN sys_role r ON r.id = er.role_id
+        WHERE er.employee_id = #{employeeId} AND r.status = 1 AND p.status = 1
+        ORDER BY p.id
+    </select>
+</mapper>

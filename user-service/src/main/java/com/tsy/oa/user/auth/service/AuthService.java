@@ -9,13 +9,15 @@ import com.tsy.oa.user.employee.dto.EmployeeResponse;
 import com.tsy.oa.user.employee.mapper.EmployeeMapper;
 import com.tsy.oa.user.employee.model.Employee;
 import com.tsy.oa.user.error.UserErrorCode;
+import com.tsy.oa.user.rbac.dto.ApiPermissionResponse;
+import com.tsy.oa.user.rbac.dto.EmployeeAuthorizationResponse;
+import com.tsy.oa.user.rbac.service.RbacService;
 import io.jsonwebtoken.JwtException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.List;
 
 @Service
 public class AuthService {
@@ -24,17 +26,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final RbacService rbacService;
 
     public AuthService(
             EmployeeMapper employeeMapper,
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
-            TokenBlacklistService tokenBlacklistService
+            TokenBlacklistService tokenBlacklistService,
+            RbacService rbacService
     ) {
         this.employeeMapper = employeeMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.rbacService = rbacService;
     }
 
     @Transactional(readOnly = true)
@@ -47,11 +52,12 @@ public class AuthService {
             throw new BusinessException(UserErrorCode.EMPLOYEE_DISABLED);
         }
 
+        EmployeeAuthorizationResponse authorization = rbacService.getEmployeeAuthorization(employee.getId());
         String token = jwtTokenService.issueToken(
                 employee.getId(),
                 employee.getUsername(),
-                List.of(),
-                List.of()
+                authorization.roles().stream().map(role -> role.code()).toList(),
+                authorization.apiPermissions().stream().map(ApiPermissionResponse::authority).toList()
         );
         return new LoginResponse(
                 token,
