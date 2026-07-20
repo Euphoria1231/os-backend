@@ -25,6 +25,7 @@
 		<module>oa-gateway</module>
 		<module>user-service</module>
 		<module>attendance-service</module>
+		<module>flow-service</module>
 	</modules>
 
 	<properties>

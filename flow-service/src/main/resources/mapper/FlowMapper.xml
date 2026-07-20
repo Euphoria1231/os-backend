@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.flow.mapper.FlowMapper">
+
+    <resultMap id="FlowApplicationResultMap" type="com.tsy.oa.flow.model.FlowApplication">
+        <id property="id" column="id"/>
+        <result property="applicationNo" column="application_no"/>
+        <result property="applicantId" column="applicant_id"/>
+        <result property="approverId" column="approver_id"/>
+        <result property="applicationType" column="application_type"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="reason" column="reason"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="ApprovalTaskRecordResultMap" type="com.tsy.oa.flow.model.ApprovalTaskRecord">
+        <id property="applicationId" column="application_id"/>
+        <result property="applicationNo" column="application_no"/>
+        <result property="applicantId" column="applicant_id"/>
+        <result property="applicationType" column="application_type"/>
+        <result property="action" column="action"/>
+        <result property="comment" column="comment"/>
+        <result property="processedAt" column="processed_at"/>
+    </resultMap>
+
+    <sql id="ApplicationColumns">
+        id, application_no, applicant_id, approver_id, application_type,
+        start_time, end_time, reason, status, created_at, updated_at
+    </sql>
+
+    <insert id="insertApplication" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO flow_application (
+            application_no, applicant_id, approver_id, application_type,
+            start_time, end_time, reason, status
+        ) VALUES (
+            #{applicationNo}, #{applicantId}, #{approverId}, #{applicationType},
+            #{startTime}, #{endTime}, #{reason}, #{status}
+        )
+    </insert>
+
+    <select id="findApplicationById" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application WHERE id = #{id}
+    </select>
+
+    <select id="findApplicationsByApplicant" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application
+        WHERE applicant_id = #{applicantId}
+        ORDER BY created_at DESC, id DESC
+    </select>
+
+    <select id="findPendingApplicationsByApprover" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application
+        WHERE approver_id = #{approverId} AND status = 'PENDING'
+        ORDER BY created_at, id
+    </select>
+
+    <update id="updateApplicationStatusIfPending">
+        UPDATE flow_application
+        SET status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <insert id="insertApprovalRecord">
+        INSERT INTO approval_record (application_id, approver_id, action, comment)
+        VALUES (#{applicationId}, #{approverId}, #{action}, #{comment})
+    </insert>
+
+    <select id="findCompletedTasksByApprover" resultMap="ApprovalTaskRecordResultMap">
+        SELECT a.application_id, f.application_no, f.applicant_id, f.application_type,
+               a.action, a.comment, a.created_at AS processed_at
+        FROM approval_record a
+        INNER JOIN flow_application f ON f.id = a.application_id
+        WHERE a.approver_id = #{approverId}
+        ORDER BY a.created_at DESC, a.id DESC
+    </select>
+</mapper>
