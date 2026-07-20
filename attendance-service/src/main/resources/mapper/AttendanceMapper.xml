@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.attendance.mapper.AttendanceMapper">
+
+    <resultMap id="AttendanceRecordResultMap" type="com.tsy.oa.attendance.model.AttendanceRecord">
+        <id property="id" column="id"/>
+        <result property="employeeId" column="employee_id"/>
+        <result property="attendanceDate" column="attendance_date"/>
+        <result property="clockInTime" column="clock_in_time"/>
+        <result property="clockOutTime" column="clock_out_time"/>
+        <result property="attendanceStatus" column="attendance_status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO attendance_record (
+            employee_id, attendance_date, clock_in_time, attendance_status
+        ) VALUES (
+            #{employeeId}, #{attendanceDate}, #{clockInTime}, #{attendanceStatus}
+        )
+    </insert>
+
+    <select id="findByEmployeeAndDate" resultMap="AttendanceRecordResultMap">
+        SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
+               attendance_status, created_at, updated_at
+        FROM attendance_record
+        WHERE employee_id = #{employeeId} AND attendance_date = #{attendanceDate}
+    </select>
+
+    <update id="updateClockOut">
+        UPDATE attendance_record
+        SET clock_out_time = #{clockOutTime}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <select id="findByEmployeeAndDateRange" resultMap="AttendanceRecordResultMap">
+        SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
+               attendance_status, created_at, updated_at
+        FROM attendance_record
+        WHERE employee_id = #{employeeId}
+          AND attendance_date BETWEEN #{startDate} AND #{endDate}
+        ORDER BY attendance_date DESC
+    </select>
+</mapper>

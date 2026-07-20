@@ -24,6 +24,7 @@
 		<module>oa-common</module>
 		<module>oa-gateway</module>
 		<module>user-service</module>
+		<module>attendance-service</module>
 	</modules>
 
 	<properties>

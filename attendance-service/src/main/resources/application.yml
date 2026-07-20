@@ -1,0 +1,50 @@
+server:
+  port: 9002
+
+spring:
+  application:
+    name: attendance-service
+  datasource:
+    url: ${OA_ATTENDANCE_DB_URL:jdbc:mysql://127.0.0.1:3306/oa_attendance?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${OA_ATTENDANCE_DB_USERNAME:root}
+    password: ${OA_ATTENDANCE_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        namespace: ${NACOS_NAMESPACE:}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        namespace: ${NACOS_NAMESPACE:}
+
+mybatis:
+  mapper-locations: classpath:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+attendance:
+  clock:
+    work-start-time: ${ATTENDANCE_WORK_START_TIME:09:00}
+    late-threshold-minutes: ${ATTENDANCE_LATE_THRESHOLD_MINUTES:0}
+    lock-ttl: ${ATTENDANCE_LOCK_TTL:PT10S}
+    completed-marker-ttl: ${ATTENDANCE_COMPLETED_MARKER_TTL:PT36H}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
