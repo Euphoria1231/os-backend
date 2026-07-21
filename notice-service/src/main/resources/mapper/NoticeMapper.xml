@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.notice.mapper.NoticeMapper">
+
+    <resultMap id="NoticeResultMap" type="com.tsy.oa.notice.model.Notice">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="publisherId" column="publisher_id"/>
+        <result property="status" column="status"/>
+        <result property="publishedAt" column="published_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="NoticeViewResultMap" type="com.tsy.oa.notice.model.NoticeView" extends="NoticeResultMap">
+        <result property="read" column="is_read"/>
+        <result property="readAt" column="read_at"/>
+    </resultMap>
+
+    <sql id="NoticeColumns">
+        n.id, n.title, n.content, n.publisher_id, n.status,
+        n.published_at, n.created_at, n.updated_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO notice (title, content, publisher_id, status, published_at)
+        VALUES (#{title}, #{content}, #{publisherId}, #{status}, #{publishedAt})
+    </insert>
+
+    <select id="findPublishedById" resultMap="NoticeResultMap">
+        SELECT <include refid="NoticeColumns"/>
+        FROM notice n
+        WHERE n.id = #{id} AND n.status = 'PUBLISHED'
+    </select>
+
+    <select id="findPublishedForEmployee" resultMap="NoticeViewResultMap">
+        SELECT <include refid="NoticeColumns"/>,
+               CASE WHEN nr.id IS NULL THEN FALSE ELSE TRUE END AS is_read,
+               nr.read_at
+        FROM notice n
+        LEFT JOIN notice_read nr
+          ON nr.notice_id = n.id AND nr.employee_id = #{employeeId}
+        WHERE n.status = 'PUBLISHED'
+        ORDER BY n.published_at DESC, n.id DESC
+    </select>
+
+    <select id="findPublishedByIdForEmployee" resultMap="NoticeViewResultMap">
+        SELECT <include refid="NoticeColumns"/>,
+               CASE WHEN nr.id IS NULL THEN FALSE ELSE TRUE END AS is_read,
+               nr.read_at
+        FROM notice n
+        LEFT JOIN notice_read nr
+          ON nr.notice_id = n.id AND nr.employee_id = #{employeeId}
+        WHERE n.id = #{noticeId} AND n.status = 'PUBLISHED'
+    </select>
+
+    <insert id="insertReadIfAbsent">
+        INSERT INTO notice_read (notice_id, employee_id)
+        SELECT #{noticeId}, #{employeeId}
+        WHERE NOT EXISTS (
+            SELECT 1 FROM notice_read
+            WHERE notice_id = #{noticeId} AND employee_id = #{employeeId}
+        )
+    </insert>
+
+    <select id="countUnread" resultType="int">
+        SELECT COUNT(*)
+        FROM notice n
+        WHERE n.status = 'PUBLISHED'
+          AND NOT EXISTS (
+              SELECT 1 FROM notice_read nr
+              WHERE nr.notice_id = n.id AND nr.employee_id = #{employeeId}
+          )
+    </select>
+</mapper>

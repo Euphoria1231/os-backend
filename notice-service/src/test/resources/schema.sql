@@ -1,0 +1,21 @@
+DROP TABLE IF EXISTS notice_read;
+DROP TABLE IF EXISTS notice;
+
+CREATE TABLE notice (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    publisher_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    published_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE notice_read (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    notice_id BIGINT NOT NULL,
+    employee_id BIGINT NOT NULL,
+    read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_notice_read_employee UNIQUE (notice_id, employee_id)
+);

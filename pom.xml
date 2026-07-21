@@ -26,6 +26,7 @@
 		<module>user-service</module>
 		<module>attendance-service</module>
 		<module>flow-service</module>
+		<module>notice-service</module>
 	</modules>
 
 	<properties>
