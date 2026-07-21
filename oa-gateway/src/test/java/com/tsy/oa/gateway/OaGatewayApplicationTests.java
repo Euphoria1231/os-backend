@@ -8,6 +8,8 @@ import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,20 +33,30 @@ class OaGatewayApplicationTests {
     }
 
     @Test
-    void userServiceRouteIsConfigured() {
+    void businessServiceRoutesAreConfigured() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
                 .collectList()
                 .block(Duration.ofSeconds(5));
 
         assertNotNull(routes);
-        RouteDefinition route = routes.stream()
-                .filter(definition -> "user-service".equals(definition.getId()))
-                .findFirst()
-                .orElseThrow();
+        Map<String, String> expectedRoutes = Map.of(
+                "user-service", "/api/user/**",
+                "attendance-service", "/api/attendance/**",
+                "flow-service", "/api/flow/**",
+                "notice-service", "/api/notices/**"
+        );
 
-        assertEquals("lb://user-service", route.getUri().toString());
-        assertTrue(route.getPredicates().stream().anyMatch(predicate ->
-                "Path".equals(predicate.getName())
-                        && predicate.getArgs().containsValue("/api/user/**")));
+        expectedRoutes.forEach((serviceName, pathPattern) -> {
+            Optional<RouteDefinition> matchingRoute = routes.stream()
+                    .filter(definition -> serviceName.equals(definition.getId()))
+                    .findFirst();
+            assertTrue(matchingRoute.isPresent(), "缺少 Gateway 路由: " + serviceName);
+            RouteDefinition route = matchingRoute.orElseThrow();
+
+            assertEquals("lb://" + serviceName, route.getUri().toString());
+            assertTrue(route.getPredicates().stream().anyMatch(predicate ->
+                    "Path".equals(predicate.getName())
+                            && predicate.getArgs().containsValue(pathPattern)));
+        });
     }
 }

@@ -43,6 +43,18 @@ spring:
               uri: lb://user-service
               predicates:
                 - Path=/api/user/**
+            - id: attendance-service
+              uri: lb://attendance-service
+              predicates:
+                - Path=/api/attendance/**
+            - id: flow-service
+              uri: lb://flow-service
+              predicates:
+                - Path=/api/flow/**
+            - id: notice-service
+              uri: lb://notice-service
+              predicates:
+                - Path=/api/notices/**
 
 management:
   endpoints:
