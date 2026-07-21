@@ -62,8 +62,10 @@ mysql.exe --default-character-set=utf8mb4 -u root -p < sql\init_data.sql
 ```powershell
 $env:JWT_SECRET = 'replace-with-a-random-secret-of-at-least-32-bytes'
 $env:NACOS_SERVER_ADDR = '127.0.0.1:8848'
-$env:NACOS_USERNAME = 'nacos'
-$env:NACOS_PASSWORD = 'nacos'
+
+# 仅在 Nacos 服务器启用认证时设置
+$env:NACOS_USERNAME = 'your-nacos-username'
+$env:NACOS_PASSWORD = 'your-nacos-password'
 
 $env:OA_USER_DB_PASSWORD = 'your-mysql-password'
 $env:OA_ATTENDANCE_DB_PASSWORD = 'your-mysql-password'
@@ -81,7 +83,7 @@ $env:REDIS_PORT = '6379'
 | `JWT_SECRET` | JWT 签名密钥，Gateway 与用户服务必须一致 | 无，必须设置 |
 | `JWT_VALIDITY` | Token 有效期 | `PT2H` |
 | `NACOS_SERVER_ADDR` | Nacos 地址 | `127.0.0.1:8848` |
-| `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 登录信息 | `nacos` / `nacos` |
+| `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 登录信息，仅启用认证时设置 | 空 |
 | `NACOS_NAMESPACE` | Nacos namespace ID | 空，即 public |
 | `OA_*_DB_URL` | 对应微服务的 JDBC URL | 本机对应逻辑数据库 |
 | `OA_*_DB_USERNAME` | 对应微服务的数据库账号 | `root` |
