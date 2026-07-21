@@ -9,7 +9,7 @@ Nacos，数据访问使用 MyBatis，登录状态使用 JWT 和 Redis。
 | 模块 | 端口 | 职责 |
 | --- | ---: | --- |
 | `oa-common` | - | 统一响应、异常模型和 JWT 公共能力 |
-| `oa-gateway` | 8080 | 路由、CORS、JWT 校验、接口权限和操作日志 |
+| `oa-gateway` | 8088 | 路由、CORS、JWT 校验、接口权限和操作日志 |
 | `user-service` | 9001 | 登录退出、部门、岗位、员工和 RBAC |
 | `attendance-service` | 9002 | 上下班打卡、个人记录、Redis 防重复与分布式锁 |
 | `flow-service` | 9003 | 请假、加班、直属领导一级审批和待办/已办 |
@@ -127,7 +127,7 @@ mvn.cmd -f oa-gateway/pom.xml spring-boot:run
 答辩前应提前启动全部服务并确认以下健康检查返回 `UP`：
 
 ```text
-http://localhost:8080/actuator/health
+http://localhost:8088/actuator/health
 http://localhost:9001/actuator/health
 http://localhost:9002/actuator/health
 http://localhost:9003/actuator/health
@@ -151,7 +151,7 @@ http://localhost:9004/actuator/health
 Apifox 环境的 Base URL 统一设置为：
 
 ```text
-http://localhost:8080
+http://localhost:8088
 ```
 
 先调用登录接口：
