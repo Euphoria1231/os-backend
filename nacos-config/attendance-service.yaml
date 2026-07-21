@@ -1,0 +1,6 @@
+attendance:
+  clock:
+    work-start-time: "09:00"
+    late-threshold-minutes: 5
+    lock-ttl: PT10S
+    completed-marker-ttl: PT36H
