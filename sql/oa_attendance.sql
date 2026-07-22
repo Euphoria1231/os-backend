@@ -33,3 +33,21 @@ CREATE TABLE IF NOT EXISTS attendance_daily_summary (
     UNIQUE KEY uk_daily_summary_employee_date (employee_id, work_date),
     KEY idx_daily_summary_work_date_status (work_date, status)
 ) ENGINE=InnoDB COMMENT='员工每日考勤汇总表';
+
+CREATE TABLE IF NOT EXISTS attendance_monthly_summary (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '月度考勤汇总ID',
+    employee_id BIGINT NOT NULL COMMENT '员工ID',
+    summary_month DATE NOT NULL COMMENT '汇总月份，保存为当月第一天',
+    expected_attendance_days INT NOT NULL COMMENT '应出勤天数',
+    actual_attendance_days INT NOT NULL COMMENT '实际出勤天数',
+    late_count INT NOT NULL COMMENT '迟到次数',
+    early_leave_count INT NOT NULL COMMENT '早退次数',
+    absence_count INT NOT NULL COMMENT '旷工次数',
+    leave_days INT NOT NULL COMMENT '请假天数',
+    total_work_hours DECIMAL(8, 2) NOT NULL COMMENT '总工作时长（小时）',
+    calculated_at DATETIME NOT NULL COMMENT '汇总计算时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_monthly_summary_employee_month (employee_id, summary_month),
+    KEY idx_monthly_summary_month (summary_month)
+) ENGINE=InnoDB COMMENT='员工月度考勤汇总表';

@@ -45,6 +45,15 @@ public class UserAttendanceWorkforceProvider {
                 .toList();
     }
 
+    public List<Long> findActiveEmployeeIdsByDepartment(Long departmentId) {
+        List<UserAttendanceClient.EmployeeSummary> employees = requireData(client.findEmployees());
+        return employees.stream()
+                .filter(employee -> employee.id() != null && ENABLED == employee.status())
+                .filter(employee -> departmentId.equals(employee.departmentId()))
+                .map(UserAttendanceClient.EmployeeSummary::id)
+                .toList();
+    }
+
     private <T> T requireData(ApiResponse<T> response) {
         if (response == null || response.code() != 0 || response.data() == null) {
             throw new IllegalStateException("用户服务返回错误");

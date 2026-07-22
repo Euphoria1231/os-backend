@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.attendance.mapper.AttendanceMonthlySummaryMapper">
+
+    <resultMap id="AttendanceMonthlySummaryResultMap" type="com.tsy.oa.attendance.model.AttendanceMonthlySummary">
+        <id property="id" column="id"/>
+        <result property="employeeId" column="employee_id"/>
+        <result property="summaryMonth" column="summary_month"/>
+        <result property="expectedAttendanceDays" column="expected_attendance_days"/>
+        <result property="actualAttendanceDays" column="actual_attendance_days"/>
+        <result property="lateCount" column="late_count"/>
+        <result property="earlyLeaveCount" column="early_leave_count"/>
+        <result property="absenceCount" column="absence_count"/>
+        <result property="leaveDays" column="leave_days"/>
+        <result property="totalWorkHours" column="total_work_hours"/>
+        <result property="calculatedAt" column="calculated_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="upsert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO attendance_monthly_summary (
+            employee_id, summary_month, expected_attendance_days, actual_attendance_days,
+            late_count, early_leave_count, absence_count, leave_days, total_work_hours, calculated_at
+        ) VALUES (
+            #{employeeId}, #{summaryMonth}, #{expectedAttendanceDays}, #{actualAttendanceDays},
+            #{lateCount}, #{earlyLeaveCount}, #{absenceCount}, #{leaveDays}, #{totalWorkHours}, #{calculatedAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            expected_attendance_days = VALUES(expected_attendance_days),
+            actual_attendance_days = VALUES(actual_attendance_days),
+            late_count = VALUES(late_count),
+            early_leave_count = VALUES(early_leave_count),
+            absence_count = VALUES(absence_count),
+            leave_days = VALUES(leave_days),
+            total_work_hours = VALUES(total_work_hours),
+            calculated_at = VALUES(calculated_at),
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+    <select id="findByEmployeeAndMonth" resultMap="AttendanceMonthlySummaryResultMap">
+        SELECT id, employee_id, summary_month, expected_attendance_days, actual_attendance_days,
+               late_count, early_leave_count, absence_count, leave_days, total_work_hours,
+               calculated_at, created_at, updated_at
+        FROM attendance_monthly_summary
+        WHERE employee_id = #{employeeId} AND summary_month = #{summaryMonth}
+    </select>
+</mapper>

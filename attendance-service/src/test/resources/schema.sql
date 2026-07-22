@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS attendance_record;
 DROP TABLE IF EXISTS attendance_daily_summary;
+DROP TABLE IF EXISTS attendance_monthly_summary;
 
 CREATE TABLE attendance_record (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -26,4 +27,21 @@ CREATE TABLE attendance_daily_summary (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_daily_summary_employee_date UNIQUE (employee_id, work_date)
+);
+
+CREATE TABLE attendance_monthly_summary (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    employee_id BIGINT NOT NULL,
+    summary_month DATE NOT NULL,
+    expected_attendance_days INT NOT NULL,
+    actual_attendance_days INT NOT NULL,
+    late_count INT NOT NULL,
+    early_leave_count INT NOT NULL,
+    absence_count INT NOT NULL,
+    leave_days INT NOT NULL,
+    total_work_hours DECIMAL(8, 2) NOT NULL,
+    calculated_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_monthly_summary_employee_month UNIQUE (employee_id, summary_month)
 );

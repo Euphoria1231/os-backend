@@ -28,6 +28,10 @@ public interface UserAttendanceClient {
     record ApiPermissionSummary(String authority, Integer status) {
     }
 
-    record EmployeeSummary(Long id, Integer status) {
+    record EmployeeSummary(Long id, Long departmentId, Integer status) {
+
+        public EmployeeSummary(Long id, Integer status) {
+            this(id, null, status);
+        }
     }
 }

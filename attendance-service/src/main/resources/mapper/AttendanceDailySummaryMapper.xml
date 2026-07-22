@@ -50,4 +50,13 @@
         FROM attendance_daily_summary
         WHERE employee_id = #{employeeId} AND work_date = #{workDate}
     </select>
+
+    <select id="findByEmployeeAndDateRange" resultMap="AttendanceDailySummaryResultMap">
+        SELECT id, employee_id, work_date, clock_in_time, clock_out_time, work_hours,
+               status, calculation_version, calculated_at, created_at, updated_at
+        FROM attendance_daily_summary
+        WHERE employee_id = #{employeeId}
+          AND work_date BETWEEN #{startDate} AND #{endDate}
+        ORDER BY work_date ASC
+    </select>
 </mapper>
