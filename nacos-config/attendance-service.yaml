@@ -5,6 +5,11 @@ attendance:
     lock-ttl: PT10S
     completed-marker-ttl: PT36H
 
+oa:
+  attendance:
+    abnormal-events:
+      topic: oa-attendance-abnormal-events
+
 xxl:
   job:
     enabled: false

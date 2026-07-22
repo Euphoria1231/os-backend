@@ -1,6 +1,8 @@
 package com.tsy.oa.attendance.calculation;
 
 import com.tsy.oa.attendance.AttendanceServiceApplication;
+import com.tsy.oa.attendance.event.AttendanceAbnormalEvent;
+import com.tsy.oa.attendance.event.AttendanceAbnormalEventPublisher;
 import com.tsy.oa.attendance.mapper.AttendanceDailySummaryMapper;
 import com.tsy.oa.attendance.mapper.AttendanceMapper;
 import com.tsy.oa.attendance.model.AttendanceDailySummary;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.ArrayList;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -44,11 +47,15 @@ class AttendanceDailyCalculationServiceTests {
     @Autowired
     private StubApprovedLeaveProvider approvedLeaveProvider;
 
+    @Autowired
+    private InMemoryAttendanceAbnormalEventPublisher abnormalEventPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM attendance_daily_summary");
         jdbcTemplate.update("DELETE FROM attendance_record");
         approvedLeaveProvider.reset();
+        abnormalEventPublisher.clear();
     }
 
     @Test
@@ -88,6 +95,47 @@ class AttendanceDailyCalculationServiceTests {
         assertThat(rowCount).isZero();
     }
 
+    @Test
+    void publishesAbnormalEventWithRequiredFieldsAfterSummaryIsSaved() {
+        AttendanceDailySummary summary = calculationService.calculate(EMPLOYEE_ID, WORK_DATE);
+
+        assertThat(summary.getStatus()).isEqualTo("ABSENT");
+        assertThat(abnormalEventPublisher.events()).hasSize(1);
+        AttendanceAbnormalEvent event = abnormalEventPublisher.events().getFirst();
+        assertThat(event.eventId()).isEqualTo(
+                "attendance-abnormal:10:2026-07-21:ABSENT"
+        );
+        assertThat(event.employeeId()).isEqualTo(EMPLOYEE_ID);
+        assertThat(event.workDate()).isEqualTo(WORK_DATE);
+        assertThat(event.abnormalType()).isEqualTo("ABSENT");
+        assertThat(event.occurredAt()).isEqualTo(summary.getCalculatedAt());
+        assertThat(event.traceId()).isNotBlank();
+    }
+
+    @Test
+    void keepsSameEventIdWhenSameAbnormalResultIsRecalculated() {
+        calculationService.calculate(EMPLOYEE_ID, WORK_DATE);
+        calculationService.calculate(EMPLOYEE_ID, WORK_DATE);
+
+        assertThat(abnormalEventPublisher.events()).hasSize(2);
+        assertThat(abnormalEventPublisher.events())
+                .extracting(AttendanceAbnormalEvent::eventId)
+                .containsOnly("attendance-abnormal:10:2026-07-21:ABSENT");
+    }
+
+    @Test
+    void doesNotPublishEventForNormalOrApprovedLeaveResult() {
+        insertCompleteAttendanceRecord();
+        calculationService.calculate(EMPLOYEE_ID, WORK_DATE);
+
+        jdbcTemplate.update("DELETE FROM attendance_daily_summary");
+        jdbcTemplate.update("DELETE FROM attendance_record");
+        approvedLeaveProvider.approveLeave(EMPLOYEE_ID, WORK_DATE);
+        calculationService.calculate(EMPLOYEE_ID, WORK_DATE);
+
+        assertThat(abnormalEventPublisher.events()).isEmpty();
+    }
+
     private void insertCompleteAttendanceRecord() {
         AttendanceRecord record = new AttendanceRecord();
         record.setEmployeeId(EMPLOYEE_ID);
@@ -106,18 +154,25 @@ class AttendanceDailyCalculationServiceTests {
         StubApprovedLeaveProvider stubApprovedLeaveProvider() {
             return new StubApprovedLeaveProvider();
         }
+
+        @Bean
+        @Primary
+        InMemoryAttendanceAbnormalEventPublisher inMemoryAttendanceAbnormalEventPublisher() {
+            return new InMemoryAttendanceAbnormalEventPublisher();
+        }
     }
 
     static class StubApprovedLeaveProvider implements ApprovedLeaveProvider {
 
         private RuntimeException failure;
+        private List<ApprovedLeave> approvedLeaves = List.of();
 
         @Override
         public List<ApprovedLeave> findApprovedLeaves(LocalDate date) {
             if (failure != null) {
                 throw failure;
             }
-            return List.of();
+            return approvedLeaves;
         }
 
         void failWith(RuntimeException failure) {
@@ -126,6 +181,32 @@ class AttendanceDailyCalculationServiceTests {
 
         void reset() {
             failure = null;
+            approvedLeaves = List.of();
+        }
+
+        void approveLeave(Long employeeId, LocalDate workDate) {
+            approvedLeaves = List.of(new ApprovedLeave(
+                    employeeId, workDate, workDate, "APPROVED"
+            ));
+        }
+    }
+
+    static class InMemoryAttendanceAbnormalEventPublisher
+            implements AttendanceAbnormalEventPublisher {
+
+        private final List<AttendanceAbnormalEvent> events = new ArrayList<>();
+
+        @Override
+        public void publish(AttendanceAbnormalEvent event) {
+            events.add(event);
+        }
+
+        List<AttendanceAbnormalEvent> events() {
+            return List.copyOf(events);
+        }
+
+        void clear() {
+            events.clear();
         }
     }
 }
