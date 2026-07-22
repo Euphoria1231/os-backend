@@ -102,6 +102,53 @@ class FlowControllerTests {
     }
 
     @Test
+    void listsTodoByFlowableCurrentTaskForCurrentUser() throws Exception {
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "release support");
+        jdbcTemplate.update("UPDATE flow_application SET approver_id = ? WHERE id = ?", 30L, applicationId);
+
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(applicationId))
+                .andExpect(jsonPath("$.data[0].applicationType").value("OVERTIME"))
+                .andExpect(jsonPath("$.data[0].processInstanceId").doesNotExist());
+
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void preventsCompletedTaskFromBeingProcessedAgainAndKeepsDoneIsolated() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "family errand");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"approved\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.approverId").value(30));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"repeat approval\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40301));
+
+        mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].applicationId").value(applicationId))
+                .andExpect(jsonPath("$.data[0].action").value("APPROVE"));
+
+        mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
     void rejectsApprovalByNonLeader() throws Exception {
         long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
 

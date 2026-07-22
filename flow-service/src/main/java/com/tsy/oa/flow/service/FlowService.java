@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,7 +74,26 @@ public class FlowService {
 
     @Transactional(readOnly = true)
     public List<FlowApplicationResponse> listTodo(Long approverId) {
-        return flowMapper.findPendingApplicationsByApprover(approverId).stream()
+        List<Task> currentTasks = taskService.createTaskQuery()
+                .taskCandidateOrAssigned(String.valueOf(approverId))
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list();
+        if (currentTasks.isEmpty()) {
+            return List.of();
+        }
+        List<String> processInstanceIds = currentTasks.stream()
+                .map(Task::getProcessInstanceId)
+                .toList();
+        Map<String, Integer> taskOrder = new HashMap<>();
+        for (int index = 0; index < processInstanceIds.size(); index++) {
+            taskOrder.putIfAbsent(processInstanceIds.get(index), index);
+        }
+        return flowMapper.findPendingApplicationsByProcessInstanceIds(processInstanceIds).stream()
+                .sorted(Comparator.comparingInt(application ->
+                        taskOrder.getOrDefault(application.getProcessInstanceId(), Integer.MAX_VALUE)
+                ))
                 .map(FlowApplicationResponse::from)
                 .toList();
     }
