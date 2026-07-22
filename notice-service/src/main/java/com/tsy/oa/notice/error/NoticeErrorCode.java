@@ -4,7 +4,8 @@ import com.tsy.oa.common.error.ErrorCode;
 
 public enum NoticeErrorCode implements ErrorCode {
 
-    NOTICE_NOT_FOUND(40401, "公告不存在或未发布");
+    NOTICE_NOT_FOUND(40401, "公告不存在或未发布"),
+    MESSAGE_NOT_FOUND(40402, "Message does not exist or is not accessible");
 
     private final int code;
     private final String message;

@@ -16,6 +16,30 @@ CREATE TABLE IF NOT EXISTS notice (
     KEY idx_notice_status_published (status, published_at)
 ) ENGINE=InnoDB COMMENT='公司公告表';
 
+CREATE TABLE IF NOT EXISTS message_consume_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'Message consume record ID',
+    event_id VARCHAR(100) NOT NULL COMMENT 'Event ID',
+    topic VARCHAR(100) NOT NULL COMMENT 'RocketMQ Topic',
+    consumed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Consumed time',
+    UNIQUE KEY uk_message_consume_event (event_id)
+) ENGINE=InnoDB COMMENT='Message consume idempotency table';
+
+CREATE TABLE IF NOT EXISTS message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'Message ID',
+    recipient_id BIGINT NOT NULL COMMENT 'Recipient employee ID',
+    title VARCHAR(200) NOT NULL COMMENT 'Message title',
+    content VARCHAR(1000) NOT NULL COMMENT 'Message content',
+    business_type VARCHAR(50) NOT NULL COMMENT 'Business type',
+    business_id BIGINT NOT NULL COMMENT 'Business ID',
+    source_event_id VARCHAR(100) NOT NULL COMMENT 'Source event ID',
+    read_at DATETIME NULL COMMENT 'Read time',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created time',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated time',
+    UNIQUE KEY uk_message_event_recipient (source_event_id, recipient_id),
+    KEY idx_message_recipient_created (recipient_id, created_at),
+    KEY idx_message_recipient_read (recipient_id, read_at)
+) ENGINE=InnoDB COMMENT='Message table';
+
 CREATE TABLE IF NOT EXISTS notice_read (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '阅读记录ID',
     notice_id BIGINT NOT NULL COMMENT '公告ID',
