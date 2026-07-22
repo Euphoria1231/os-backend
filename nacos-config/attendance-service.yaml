@@ -4,3 +4,16 @@ attendance:
     late-threshold-minutes: 5
     lock-ttl: PT10S
     completed-marker-ttl: PT36H
+
+xxl:
+  job:
+    enabled: false
+    admin-addresses: ""
+    access-token: ""
+    executor:
+      app-name: attendance-service
+      address: ""
+      ip: ""
+      port: 9999
+      log-path: ./logs/xxl-job/attendance-service
+      log-retention-days: 30
