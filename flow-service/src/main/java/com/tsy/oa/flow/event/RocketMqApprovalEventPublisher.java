@@ -1,0 +1,50 @@
+package com.tsy.oa.flow.event;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.springframework.util.ReflectionUtils;
+
+import java.lang.reflect.Method;
+
+@Component
+public class RocketMqApprovalEventPublisher implements ApprovalEventPublisher {
+
+    private static final Logger log = LoggerFactory.getLogger(RocketMqApprovalEventPublisher.class);
+
+    private final ObjectProvider<Object> rocketMqTemplateProvider;
+    private final ApprovalEventPublisher fallbackPublisher = new NoOpApprovalEventPublisher();
+    private final String topic;
+
+    public RocketMqApprovalEventPublisher(
+            @Qualifier("rocketMQTemplate") ObjectProvider<Object> rocketMqTemplateProvider,
+            @Value("${oa.flow.approval-events.topic:oa-approval-events}") String topic
+    ) {
+        this.rocketMqTemplateProvider = rocketMqTemplateProvider;
+        this.topic = topic;
+    }
+
+    @Override
+    public void publish(ApprovalCompletedEvent event) {
+        Object rocketMqTemplate = rocketMqTemplateProvider.getIfAvailable();
+        if (rocketMqTemplate == null) {
+            fallbackPublisher.publish(event);
+            return;
+        }
+        Method convertAndSend = ReflectionUtils.findMethod(
+                rocketMqTemplate.getClass(),
+                "convertAndSend",
+                String.class,
+                Object.class
+        );
+        if (convertAndSend == null) {
+            throw new IllegalStateException("RocketMQTemplate convertAndSend(String, Object) method is unavailable");
+        }
+        ReflectionUtils.makeAccessible(convertAndSend);
+        ReflectionUtils.invokeMethod(convertAndSend, rocketMqTemplate, topic, event);
+        log.info("Published approval completed event, eventId={}, topic={}", event.eventId(), topic);
+    }
+}

@@ -8,16 +8,23 @@ import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
+import com.tsy.oa.flow.event.ApprovalCompletedEvent;
+import com.tsy.oa.flow.event.ApprovalEventPublisher;
 import com.tsy.oa.flow.mapper.FlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.task.api.Task;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -27,6 +34,8 @@ import java.util.UUID;
 
 @Service
 public class FlowService {
+
+    private static final Logger log = LoggerFactory.getLogger(FlowService.class);
 
     private static final String PENDING = "PENDING";
     private static final String APPROVED = "APPROVED";
@@ -42,17 +51,20 @@ public class FlowService {
     private final EmployeeDirectory employeeDirectory;
     private final RuntimeService runtimeService;
     private final TaskService taskService;
+    private final ApprovalEventPublisher approvalEventPublisher;
 
     public FlowService(
             FlowMapper flowMapper,
             EmployeeDirectory employeeDirectory,
             RuntimeService runtimeService,
-            TaskService taskService
+            TaskService taskService,
+            ApprovalEventPublisher approvalEventPublisher
     ) {
         this.flowMapper = flowMapper;
         this.employeeDirectory = employeeDirectory;
         this.runtimeService = runtimeService;
         this.taskService = taskService;
+        this.approvalEventPublisher = approvalEventPublisher;
     }
 
     @Transactional
@@ -201,8 +213,10 @@ public class FlowService {
         );
         if (!approved) {
             updateStatus(applicationId, REJECTED);
+            publishApprovalCompletedEventAfterCommit(application, REJECTED);
         } else if (isProcessEnded(application.getProcessInstanceId())) {
             updateStatus(applicationId, APPROVED);
+            publishApprovalCompletedEventAfterCommit(application, APPROVED);
         } else {
             flowMapper.updateCurrentApproverIfPending(
                     applicationId,
@@ -210,6 +224,36 @@ public class FlowService {
             );
         }
         return FlowApplicationResponse.from(requireApplication(applicationId));
+    }
+
+    private void publishApprovalCompletedEventAfterCommit(FlowApplication application, String result) {
+        ApprovalCompletedEvent event = new ApprovalCompletedEvent(
+                "approval-completed:" + application.getId() + ":" + result,
+                application.getId(),
+                application.getApplicationType(),
+                application.getApplicantId(),
+                result,
+                LocalDateTime.now(),
+                UUID.randomUUID().toString()
+        );
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishApprovalCompletedEvent(event);
+                }
+            });
+            return;
+        }
+        publishApprovalCompletedEvent(event);
+    }
+
+    private void publishApprovalCompletedEvent(ApprovalCompletedEvent event) {
+        try {
+            approvalEventPublisher.publish(event);
+        } catch (RuntimeException ex) {
+            log.error("Failed to publish approval completed event, eventId={}", event.eventId(), ex);
+        }
     }
 
     private void updateStatus(Long applicationId, String status) {
