@@ -40,6 +40,22 @@ public class AttendanceDailyCalculationService {
     @Transactional
     public AttendanceDailySummary calculate(Long employeeId, LocalDate workDate) {
         List<ApprovedLeave> approvedLeaves = approvedLeaveProvider.findApprovedLeaves(workDate);
+        return calculate(employeeId, workDate, approvedLeaves);
+    }
+
+    @Transactional
+    public List<AttendanceDailySummary> calculateAll(List<Long> employeeIds, LocalDate workDate) {
+        List<ApprovedLeave> approvedLeaves = approvedLeaveProvider.findApprovedLeaves(workDate);
+        return employeeIds.stream()
+                .map(employeeId -> calculate(employeeId, workDate, approvedLeaves))
+                .toList();
+    }
+
+    private AttendanceDailySummary calculate(
+            Long employeeId,
+            LocalDate workDate,
+            List<ApprovedLeave> approvedLeaves
+    ) {
         AttendanceRecord record = attendanceMapper.findByEmployeeAndDate(employeeId, workDate);
         AttendanceDailySummary existing = summaryMapper.findByEmployeeAndWorkDate(employeeId, workDate);
         int calculationVersion = existing == null ? 1 : existing.getCalculationVersion() + 1;
