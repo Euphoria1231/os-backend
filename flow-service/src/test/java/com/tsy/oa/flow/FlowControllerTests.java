@@ -276,6 +276,41 @@ class FlowControllerTests {
     }
 
     @Test
+    void listsApprovedLeavesCoveringSpecifiedDateForInternalAttendanceQuery() throws Exception {
+        insertApplication("L-APPROVED-COVER", 10L, "LEAVE",
+                LocalDateTime.of(2026, 7, 20, 9, 0),
+                LocalDateTime.of(2026, 7, 22, 18, 0),
+                "APPROVED");
+        insertApplication("L-APPROVED-OTHER-DATE", 11L, "LEAVE",
+                LocalDateTime.of(2026, 7, 23, 9, 0),
+                LocalDateTime.of(2026, 7, 23, 18, 0),
+                "APPROVED");
+        insertApplication("L-PENDING-COVER", 12L, "LEAVE",
+                LocalDateTime.of(2026, 7, 21, 9, 0),
+                LocalDateTime.of(2026, 7, 21, 18, 0),
+                "PENDING");
+        insertApplication("L-REJECTED-COVER", 13L, "LEAVE",
+                LocalDateTime.of(2026, 7, 21, 9, 0),
+                LocalDateTime.of(2026, 7, 21, 18, 0),
+                "REJECTED");
+        insertApplication("O-APPROVED-COVER", 14L, "OVERTIME",
+                LocalDateTime.of(2026, 7, 21, 9, 0),
+                LocalDateTime.of(2026, 7, 21, 18, 0),
+                "APPROVED");
+
+        mockMvc.perform(get("/internal/flow/approved-leaves")
+                        .param("date", "2026-07-21"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].employeeId").value(10))
+                .andExpect(jsonPath("$.data[0].startDate").value("2026-07-20"))
+                .andExpect(jsonPath("$.data[0].endDate").value("2026-07-22"))
+                .andExpect(jsonPath("$.data[0].status").value("APPROVED"))
+                .andExpect(jsonPath("$.data[0].reason").doesNotExist())
+                .andExpect(jsonPath("$.data[0].applicationNo").doesNotExist());
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
@@ -284,7 +319,8 @@ class FlowControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.openapi").isNotEmpty())
                 .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
-                .andExpect(jsonPath("$.paths['/api/flow/applications/leave']").exists());
+                .andExpect(jsonPath("$.paths['/api/flow/applications/leave']").exists())
+                .andExpect(jsonPath("$.paths['/internal/flow/approved-leaves']").exists());
     }
 
     private long submit(String path, Long applicantId, String reason) throws Exception {
@@ -312,6 +348,31 @@ class FlowControllerTests {
                 LocalDateTime.of(2026, 7, 21, 18, 0),
                 reason
         ));
+    }
+
+    private void insertApplication(
+            String applicationNo,
+            Long applicantId,
+            String applicationType,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            String status
+    ) {
+        jdbcTemplate.update("""
+                INSERT INTO flow_application (
+                    application_no, applicant_id, approver_id, application_type,
+                    start_time, end_time, reason, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                applicationNo,
+                applicantId,
+                20L,
+                applicationType,
+                startTime,
+                endTime,
+                "internal query fixture",
+                status
+        );
     }
 
     private record ApplicationPayload(LocalDateTime startTime, LocalDateTime endTime, String reason) {

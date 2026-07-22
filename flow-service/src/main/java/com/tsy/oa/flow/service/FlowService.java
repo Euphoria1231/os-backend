@@ -3,6 +3,7 @@ package com.tsy.oa.flow.service;
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.flow.dto.ApplicationRequest;
+import com.tsy.oa.flow.dto.ApprovedLeaveResponse;
 import com.tsy.oa.flow.dto.ApprovalRequest;
 import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
@@ -114,6 +115,15 @@ public class FlowService {
     public List<ApprovalTaskResponse> listDone(Long approverId) {
         return flowMapper.findCompletedTasksByApprover(approverId).stream()
                 .map(ApprovalTaskResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovedLeaveResponse> listApprovedLeaves(LocalDate date) {
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime nextDayStart = date.plusDays(1).atStartOfDay();
+        return flowMapper.findApprovedLeavesCoveringDate(dayStart, nextDayStart).stream()
+                .map(ApprovedLeaveResponse::from)
                 .toList();
     }
 
