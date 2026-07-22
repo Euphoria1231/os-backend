@@ -1,8 +1,11 @@
 package com.tsy.oa.notice.service;
 
+import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.notice.dto.NoticePublishRequest;
 import com.tsy.oa.notice.dto.NoticeResponse;
+import com.tsy.oa.notice.dto.NoticeSearchSourcePageResponse;
+import com.tsy.oa.notice.dto.NoticeSearchSourceResponse;
 import com.tsy.oa.notice.error.NoticeErrorCode;
 import com.tsy.oa.notice.mapper.NoticeMapper;
 import com.tsy.oa.notice.model.Notice;
@@ -61,6 +64,33 @@ public class NoticeService {
     @Transactional(readOnly = true)
     public int countUnread(Long employeeId) {
         return noticeMapper.countUnread(employeeId);
+    }
+
+    @Transactional(readOnly = true)
+    public NoticeSearchSourceResponse getSearchSource(Long noticeId) {
+        return NoticeSearchSourceResponse.from(requirePublishedNotice(noticeId));
+    }
+
+    @Transactional(readOnly = true)
+    public NoticeSearchSourcePageResponse listSearchSource(int page, int pageSize) {
+        int offset = checkedOffset(page, pageSize);
+        long total = noticeMapper.countPublished();
+        List<NoticeSearchSourceResponse> items = noticeMapper
+                .findPublishedPage(offset, pageSize)
+                .stream()
+                .map(NoticeSearchSourceResponse::from)
+                .toList();
+        return new NoticeSearchSourcePageResponse(
+                items, total, page, pageSize, (long) page * pageSize < total
+        );
+    }
+
+    private int checkedOffset(int page, int pageSize) {
+        long offset = Math.multiplyExact((long) page - 1L, pageSize);
+        if (offset > Integer.MAX_VALUE) {
+            throw new BusinessException(CommonErrorCode.BAD_REQUEST);
+        }
+        return (int) offset;
     }
 
     private Notice requirePublishedNotice(Long id) {

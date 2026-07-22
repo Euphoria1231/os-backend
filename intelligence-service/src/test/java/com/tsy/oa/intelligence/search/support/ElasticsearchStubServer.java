@@ -7,14 +7,29 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class ElasticsearchStubServer implements AutoCloseable {
 
     private final HttpServer server;
     private final Map<String, String> documents = new LinkedHashMap<>();
     private final Map<String, String> indexDefinitions = new LinkedHashMap<>();
+    private final List<String> bulkRequests = new CopyOnWriteArrayList<>();
+    private final List<String> deleteByQueryRequests = new CopyOnWriteArrayList<>();
+    private final List<String> refreshRequests = new CopyOnWriteArrayList<>();
+    private final List<String> operations = new CopyOnWriteArrayList<>();
+    private final Deque<String> bulkResponses = new ArrayDeque<>();
+    private final Deque<String> noticeSourceResponses = new ArrayDeque<>();
+    private final Deque<String> applicationSourceResponses = new ArrayDeque<>();
+    private final List<String> sourceRequests = new CopyOnWriteArrayList<>();
     private boolean analyzerAvailable = true;
+    private String searchResponse = "{\"hits\":{\"total\":{\"value\":0,\"relation\":\"eq\"},\"hits\":[]}}";
+    private String lastSearchRequestBody;
 
     public ElasticsearchStubServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
@@ -38,6 +53,67 @@ public final class ElasticsearchStubServer implements AutoCloseable {
         this.analyzerAvailable = analyzerAvailable;
     }
 
+    public void setSearchResponse(String searchResponse) {
+        this.searchResponse = searchResponse;
+    }
+
+    public String lastSearchRequestBody() {
+        return lastSearchRequestBody;
+    }
+
+    public List<String> bulkRequests() {
+        return List.copyOf(bulkRequests);
+    }
+
+    public List<String> deleteByQueryRequests() {
+        return List.copyOf(deleteByQueryRequests);
+    }
+
+    public List<String> refreshRequests() {
+        return List.copyOf(refreshRequests);
+    }
+
+    public List<String> operations() {
+        return List.copyOf(operations);
+    }
+
+    public void setBulkResponses(String... responses) {
+        bulkResponses.clear();
+        bulkResponses.addAll(List.of(responses));
+    }
+
+    public void seedDocument(String indexName, String documentId, String source) {
+        documents.put("/" + indexName + "/_doc/" + documentId, source);
+    }
+
+    public void reset() {
+        documents.clear();
+        bulkRequests.clear();
+        deleteByQueryRequests.clear();
+        refreshRequests.clear();
+        operations.clear();
+        bulkResponses.clear();
+        noticeSourceResponses.clear();
+        applicationSourceResponses.clear();
+        sourceRequests.clear();
+        searchResponse = "{\"hits\":{\"total\":{\"value\":0,\"relation\":\"eq\"},\"hits\":[]}}";
+        lastSearchRequestBody = null;
+    }
+
+    public void setNoticeSourceResponses(String... responses) {
+        noticeSourceResponses.clear();
+        noticeSourceResponses.addAll(List.of(responses));
+    }
+
+    public void setApplicationSourceResponses(String... responses) {
+        applicationSourceResponses.clear();
+        applicationSourceResponses.addAll(List.of(responses));
+    }
+
+    public List<String> sourceRequests() {
+        return List.copyOf(sourceRequests);
+    }
+
     @Override
     public void close() {
         server.stop(0);
@@ -54,6 +130,54 @@ public final class ElasticsearchStubServer implements AutoCloseable {
             } else {
                 respond(exchange, 400, "{\"error\":\"unknown analyzer\"}");
             }
+            return;
+        }
+
+
+        if ("POST".equals(method) && path.endsWith("/_search")) {
+            lastSearchRequestBody = requestBody;
+            operations.add("search:" + path);
+            respond(exchange, 200, searchResponse);
+            return;
+        }
+
+        if ("POST".equals(method) && path.endsWith("/_delete_by_query")) {
+            deleteByQueryRequests.add(path + "\n" + requestBody);
+            operations.add("delete:" + path);
+            String indexPrefix = path.substring(0, path.length() - "/_delete_by_query".length()) + "/_doc/";
+            documents.keySet().removeIf(documentPath -> documentPath.startsWith(indexPrefix));
+            respond(exchange, 200, "{\"deleted\":1,\"failures\":[]}");
+            return;
+        }
+
+        if ("POST".equals(method) && path.endsWith("/_refresh")) {
+            refreshRequests.add(path);
+            operations.add("refresh:" + path);
+            respond(exchange, 200, "{\"_shards\":{\"failed\":0}}");
+            return;
+        }
+
+        if ("POST".equals(method) && "/_bulk".equals(path)) {
+            bulkRequests.add(requestBody);
+            operations.add("bulk");
+            String response = bulkResponses.isEmpty()
+                    ? "{\"errors\":false,\"items\":[]}"
+                    : bulkResponses.removeFirst();
+            respond(exchange, 200, response);
+            return;
+        }
+
+        if ("GET".equals(method) && "/internal/notices/search-source".equals(path)) {
+            sourceRequests.add(exchange.getRequestURI().toString());
+            operations.add("source:notices");
+            respond(exchange, 200, noticeSourceResponses.removeFirst());
+            return;
+        }
+
+        if ("GET".equals(method) && "/internal/flow/search-source".equals(path)) {
+            sourceRequests.add(exchange.getRequestURI().toString());
+            operations.add("source:applications");
+            respond(exchange, 200, applicationSourceResponses.removeFirst());
             return;
         }
 

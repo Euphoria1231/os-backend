@@ -20,6 +20,7 @@ public interface ApplicationSearchSourceClient {
     record ApplicationSearchSourceResponse(
             Long id,
             Long applicantId,
+            Long approverId,
             String applicationType,
             String status,
             String reason,

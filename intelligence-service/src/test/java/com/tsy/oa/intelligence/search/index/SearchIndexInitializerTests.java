@@ -53,7 +53,8 @@ class SearchIndexInitializerTests {
                 .contains("\"dynamic\":\"strict\"")
                 .contains("\"analyzer\":\"ik_max_word\"")
                 .contains("\"search_analyzer\":\"ik_smart\"")
-                .contains("\"applicationId\":{\"type\":\"long\"}");
+                .contains("\"applicationId\":{\"type\":\"long\"}")
+                .contains("\"approverId\":{\"type\":\"long\"}");
     }
 
     @Test

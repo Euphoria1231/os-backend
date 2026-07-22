@@ -3,6 +3,8 @@ package com.tsy.oa.flow.service;
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.flow.dto.ApplicationRequest;
+import com.tsy.oa.flow.dto.ApplicationSearchSourcePageResponse;
+import com.tsy.oa.flow.dto.ApplicationSearchSourceResponse;
 import com.tsy.oa.flow.dto.ApprovalRequest;
 import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
@@ -62,6 +64,33 @@ public class FlowService {
         return flowMapper.findCompletedTasksByApprover(approverId).stream()
                 .map(ApprovalTaskResponse::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ApplicationSearchSourceResponse getSearchSource(Long applicationId) {
+        return ApplicationSearchSourceResponse.from(requireApplication(applicationId));
+    }
+
+    @Transactional(readOnly = true)
+    public ApplicationSearchSourcePageResponse listSearchSource(int page, int pageSize) {
+        int offset = checkedOffset(page, pageSize);
+        long total = flowMapper.countApplications();
+        List<ApplicationSearchSourceResponse> items = flowMapper
+                .findApplicationPage(offset, pageSize)
+                .stream()
+                .map(ApplicationSearchSourceResponse::from)
+                .toList();
+        return new ApplicationSearchSourcePageResponse(
+                items, total, page, pageSize, (long) page * pageSize < total
+        );
+    }
+
+    private int checkedOffset(int page, int pageSize) {
+        long offset = Math.multiplyExact((long) page - 1L, pageSize);
+        if (offset > Integer.MAX_VALUE) {
+            throw new BusinessException(CommonErrorCode.BAD_REQUEST);
+        }
+        return (int) offset;
     }
 
     @Transactional

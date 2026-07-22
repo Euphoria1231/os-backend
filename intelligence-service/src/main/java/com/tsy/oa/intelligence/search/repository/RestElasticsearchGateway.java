@@ -5,6 +5,7 @@ import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
+import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
 import java.util.Map;
@@ -86,6 +87,33 @@ public class RestElasticsearchGateway implements ElasticsearchGateway {
                 throw exception;
             }
         }
+    }
+
+    @Override
+    public String search(String indexName, String requestBody) throws IOException {
+        Request request = new Request("POST", "/" + pathSegment(indexName) + "/_search");
+        request.setJsonEntity(requestBody);
+        return EntityUtils.toString(restClient.performRequest(request).getEntity());
+    }
+
+    @Override
+    public String bulk(String requestBody) throws IOException {
+        Request request = new Request("POST", "/_bulk");
+        request.setJsonEntity(requestBody);
+        return EntityUtils.toString(restClient.performRequest(request).getEntity());
+    }
+
+    @Override
+    public void deleteByQuery(String indexName, String requestBody) throws IOException {
+        Request request = new Request("POST", "/" + pathSegment(indexName) + "/_delete_by_query");
+        request.setJsonEntity(requestBody);
+        restClient.performRequest(request);
+    }
+
+    @Override
+    public void refreshIndex(String indexName) throws IOException {
+        Request request = new Request("POST", "/" + pathSegment(indexName) + "/_refresh");
+        restClient.performRequest(request);
     }
 
     private String pathSegment(String value) {

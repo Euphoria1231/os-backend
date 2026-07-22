@@ -69,6 +69,11 @@ class AuthenticationGlobalFilterTests {
         ServerWebExchange forwardedExchange = forwarded.get();
         assertEquals("10", forwardedExchange.getRequest().getHeaders().getFirst("X-Employee-Id"));
         assertEquals("zhangsan", forwardedExchange.getRequest().getHeaders().getFirst("X-Username"));
+        assertEquals(List.of("EMPLOYEE"), forwardedExchange.getRequest().getHeaders().get("X-Roles"));
+        assertEquals(
+                List.of("GET:/api/user/employees/**"),
+                forwardedExchange.getRequest().getHeaders().get("X-Permissions")
+        );
     }
 
     @Test
@@ -110,6 +115,8 @@ class AuthenticationGlobalFilterTests {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .header("X-Employee-Id", "999")
                 .header("X-Username", "spoofed")
+                .header("X-Roles", "EMPLOYEE")
+                .header("X-Permissions", "POST:/api/intelligence/search/indexes/**")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
         AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();
@@ -118,6 +125,8 @@ class AuthenticationGlobalFilterTests {
 
         assertEquals("10", forwarded.get().getRequest().getHeaders().getFirst("X-Employee-Id"));
         assertEquals("zhangsan", forwarded.get().getRequest().getHeaders().getFirst("X-Username"));
+        assertEquals(List.of("SUPER_ADMIN"), forwarded.get().getRequest().getHeaders().get("X-Roles"));
+        assertEquals(List.of(), forwarded.get().getRequest().getHeaders().getOrEmpty("X-Permissions"));
     }
 
     private AuthenticationGlobalFilter filter(TokenBlacklistChecker blacklistChecker) {

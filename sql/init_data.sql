@@ -47,7 +47,8 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO sys_role (id, code, name, status)
 VALUES (1, 'SUPER_ADMIN', '超级管理员', 1),
-       (2, 'EMPLOYEE', '普通员工', 1) AS incoming
+       (2, 'EMPLOYEE', '普通员工', 1),
+       (3, 'DEPARTMENT_MANAGER', '部门主管', 1) AS incoming
 ON DUPLICATE KEY UPDATE
     name = incoming.name,
     status = incoming.status;
@@ -88,30 +89,36 @@ VALUES (1, 'USER_READ', '查询用户与权限数据', 'GET', '/api/user/**', 1)
        (10, 'FLOW_TASK_APPROVE', '审批申请', 'POST', '/api/flow/tasks/**', 1),
        (11, 'NOTICE_READ', '查看公告', 'GET', '/api/notices/**', 1),
        (12, 'NOTICE_MARK_READ', '标记公告已读', 'PUT', '/api/notices/*/read', 1),
-       (13, 'NOTICE_PUBLISH', '发布公告', 'POST', '/api/notices', 1) AS incoming
+       (13, 'NOTICE_PUBLISH', '发布公告', 'POST', '/api/notices', 1),
+       (14, 'INTELLIGENCE_SEARCH_READ', '使用全文检索',
+        'GET', '/api/intelligence/search/**', 1) AS incoming
 ON DUPLICATE KEY UPDATE
     name = incoming.name,
     http_method = incoming.http_method,
     path_pattern = incoming.path_pattern,
     status = incoming.status;
 
+DELETE FROM employee_role WHERE employee_id IN (1, 2, 3);
+
 INSERT INTO employee_role (employee_id, role_id)
 VALUES (1, 1),
-       (2, 2),
+       (2, 3),
        (3, 2) AS incoming
 ON DUPLICATE KEY UPDATE
     employee_id = incoming.employee_id;
 
 INSERT INTO role_menu (role_id, menu_id)
 VALUES (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
-       (2, 3), (2, 4), (2, 5) AS incoming
+       (2, 3), (2, 4), (2, 5),
+       (3, 3), (3, 4), (3, 5) AS incoming
 ON DUPLICATE KEY UPDATE
     role_id = incoming.role_id;
 
 INSERT INTO role_api_permission (role_id, api_permission_id)
 VALUES (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7),
        (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13),
-       (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12) AS incoming
+       (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 11), (2, 12), (2, 14),
+       (3, 5), (3, 6), (3, 7), (3, 8), (3, 9), (3, 10), (3, 11), (3, 12), (3, 14) AS incoming
 ON DUPLICATE KEY UPDATE
     role_id = incoming.role_id;
 

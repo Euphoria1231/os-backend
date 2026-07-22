@@ -30,6 +30,8 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String EMPLOYEE_ID_HEADER = "X-Employee-Id";
     private static final String USERNAME_HEADER = "X-Username";
+    private static final String ROLES_HEADER = "X-Roles";
+    private static final String PERMISSIONS_HEADER = "X-Permissions";
     private static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/user/auth/login",
@@ -133,8 +135,12 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
                 .headers(headers -> {
                     headers.remove(EMPLOYEE_ID_HEADER);
                     headers.remove(USERNAME_HEADER);
+                    headers.remove(ROLES_HEADER);
+                    headers.remove(PERMISSIONS_HEADER);
                     headers.set(EMPLOYEE_ID_HEADER, String.valueOf(claims.employeeId()));
                     headers.set(USERNAME_HEADER, claims.username());
+                    headers.put(ROLES_HEADER, claims.roles());
+                    headers.put(PERMISSIONS_HEADER, claims.permissions());
                 })
                 .build();
         return exchange.mutate().request(request).build();

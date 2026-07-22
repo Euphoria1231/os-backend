@@ -27,4 +27,8 @@ public interface NoticeMapper {
     );
 
     int countUnread(Long employeeId);
+
+    long countPublished();
+
+    List<Notice> findPublishedPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
 }

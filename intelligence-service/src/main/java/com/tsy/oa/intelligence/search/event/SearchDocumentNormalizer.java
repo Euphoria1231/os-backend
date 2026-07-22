@@ -35,6 +35,7 @@ public class SearchDocumentNormalizer {
         }
         long applicationId = requirePositiveId(document.applicationId(), "application");
         long applicantId = requirePositiveId(document.applicantId(), "application applicant");
+        long approverId = requirePositiveId(document.approverId(), "application approver");
         String type = requireAllowedValue(document.type(), "application type", APPLICATION_TYPES);
         String status = requireAllowedValue(document.status(), "application status", APPLICATION_STATUSES);
         LocalDateTime submittedAt = requireTime(document.submittedAt(), "application submittedAt");
@@ -45,6 +46,7 @@ public class SearchDocumentNormalizer {
         return new ApplicationSearchDocument(
                 applicationId,
                 applicantId,
+                approverId,
                 type,
                 status,
                 summarize(document.reasonSummary()),

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public record ApplicationSearchDocument(
         long applicationId,
         long applicantId,
+        long approverId,
         String type,
         String status,
         String reasonSummary,

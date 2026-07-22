@@ -13,8 +13,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ElasticsearchSearchIndexRepositoryTests {
 
@@ -70,6 +72,57 @@ class ElasticsearchSearchIndexRepositoryTests {
     }
 
     @Test
+    void savesNoticeBatchWithOneBulkRequest() throws Exception {
+        repository.saveNotices(List.of(
+                new NoticeSearchDocument(
+                        41L,
+                        "放假通知",
+                        "国庆节放假安排",
+                        LocalDateTime.of(2026, 7, 22, 9, 0),
+                        "PUBLISHED"
+                ),
+                new NoticeSearchDocument(
+                        42L,
+                        "会议通知",
+                        "周五召开会议",
+                        LocalDateTime.of(2026, 7, 22, 10, 0),
+                        "PUBLISHED"
+                )
+        ));
+
+        String request = server.bulkRequests().getFirst();
+        String[] lines = request.split("\\n");
+        assertThat(lines).hasSize(4);
+        assertThat(objectMapper.readTree(lines[0]).path("index").path("_index").asText())
+                .isEqualTo("oa-notices-v1");
+        assertThat(objectMapper.readTree(lines[0]).path("index").path("_id").asText())
+                .isEqualTo("notice-41");
+        assertThat(objectMapper.readTree(lines[2]).path("index").path("_id").asText())
+                .isEqualTo("notice-42");
+        assertThat(lines[1]).contains("国庆节放假安排");
+        assertThat(lines[3]).contains("周五召开会议");
+    }
+
+    @Test
+    void rejectsBulkResponseContainingPartialFailure() {
+        server.setBulkResponses("""
+                {"errors":true,"items":[{"index":{"_id":"notice-41","status":400}}]}
+                """);
+
+        assertThatThrownBy(() -> repository.saveNotices(List.of(
+                new NoticeSearchDocument(
+                        41L,
+                        "放假通知",
+                        "国庆节放假安排",
+                        LocalDateTime.of(2026, 7, 22, 9, 0),
+                        "PUBLISHED"
+                )
+        )))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("failed items");
+    }
+
+    @Test
     void deletesNoticeByDeterministicDocumentId() throws Exception {
         repository.saveNotice(new NoticeSearchDocument(
                 7L,
@@ -89,6 +142,7 @@ class ElasticsearchSearchIndexRepositoryTests {
         repository.saveApplication(new ApplicationSearchDocument(
                 15L,
                 3L,
+                2L,
                 "LEAVE",
                 "PENDING",
                 "身体不适",
@@ -98,6 +152,7 @@ class ElasticsearchSearchIndexRepositoryTests {
         repository.saveApplication(new ApplicationSearchDocument(
                 15L,
                 3L,
+                2L,
                 "LEAVE",
                 "APPROVED",
                 "身体不适，需要休息",
@@ -117,6 +172,7 @@ class ElasticsearchSearchIndexRepositoryTests {
         repository.saveApplication(new ApplicationSearchDocument(
                 18L,
                 5L,
+                2L,
                 "OVERTIME",
                 "PENDING",
                 "项目上线",

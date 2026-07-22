@@ -73,4 +73,16 @@
               WHERE nr.notice_id = n.id AND nr.employee_id = #{employeeId}
           )
     </select>
+
+    <select id="countPublished" resultType="long">
+        SELECT COUNT(*) FROM notice WHERE status = 'PUBLISHED'
+    </select>
+
+    <select id="findPublishedPage" resultMap="NoticeResultMap">
+        SELECT <include refid="NoticeColumns"/>
+        FROM notice n
+        WHERE n.status = 'PUBLISHED'
+        ORDER BY n.published_at DESC, n.id DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
 </mapper>

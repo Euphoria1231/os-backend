@@ -62,6 +62,7 @@ class FeignSearchDocumentSourceGatewayTests {
                 new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId,
                         3L,
+                        2L,
                         "LEAVE",
                         "APPROVED",
                         "病".repeat(600),
@@ -74,11 +75,13 @@ class FeignSearchDocumentSourceGatewayTests {
         ApplicationSearchDocument document = gateway.loadApplication(15L);
 
         assertThat(document.reasonSummary()).hasSize(500);
+        assertThat(document.approverId()).isEqualTo(2L);
 
         ApplicationSearchSourceClient mismatchedClient = applicationId -> ApiResponse.success(
                 new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         16L,
                         3L,
+                        2L,
                         "LEAVE",
                         "APPROVED",
                         "申请原因",

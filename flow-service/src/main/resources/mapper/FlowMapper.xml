@@ -79,4 +79,15 @@
         WHERE a.approver_id = #{approverId}
         ORDER BY a.created_at DESC, a.id DESC
     </select>
+
+    <select id="countApplications" resultType="long">
+        SELECT COUNT(*) FROM flow_application
+    </select>
+
+    <select id="findApplicationPage" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
 </mapper>

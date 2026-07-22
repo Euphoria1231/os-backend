@@ -130,6 +130,37 @@ class FlowControllerTests {
                 .andExpect(jsonPath("$.paths['/api/flow/applications/leave']").exists());
     }
 
+    @Test
+    void exposesApplicationsAsPagedSearchSource() throws Exception {
+        long firstApplicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+        long secondApplicationId = submit("/api/flow/applications/overtime", 10L, "版本上线");
+
+        mockMvc.perform(get("/internal/flow/search-source/{id}", firstApplicationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(firstApplicationId))
+                .andExpect(jsonPath("$.data.applicationType").value("LEAVE"))
+                .andExpect(jsonPath("$.data.approverId").value(20));
+
+        mockMvc.perform(get("/internal/flow/search-source")
+                        .param("page", "1")
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(secondApplicationId))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(1))
+                .andExpect(jsonPath("$.data.hasNext").value(true));
+    }
+
+    @Test
+    void rejectsSearchSourceOffsetBeyondMapperRange() throws Exception {
+        mockMvc.perform(get("/internal/flow/search-source")
+                        .param("page", String.valueOf(Integer.MAX_VALUE))
+                        .param("pageSize", "100"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40000));
+    }
+
     private long submit(String path, Long applicantId, String reason) throws Exception {
         String response = mockMvc.perform(post(path)
                         .header(EMPLOYEE_HEADER, applicantId.toString())

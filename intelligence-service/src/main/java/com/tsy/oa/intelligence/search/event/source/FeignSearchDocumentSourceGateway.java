@@ -45,6 +45,7 @@ public class FeignSearchDocumentSourceGateway implements SearchDocumentSourceGat
         return documentNormalizer.normalizeApplication(new ApplicationSearchDocument(
                 requireMatchingId(source.id(), applicationId, "application"),
                 requireId(source.applicantId(), "application applicant"),
+                requireId(source.approverId(), "application approver"),
                 source.applicationType(),
                 source.status(),
                 source.reason(),

@@ -111,6 +111,36 @@ class NoticeControllerTests {
                 .andExpect(jsonPath("$.paths['/api/notices']").exists());
     }
 
+    @Test
+    void exposesPublishedNoticesAsPagedSearchSource() throws Exception {
+        long firstNoticeId = publishNotice();
+        long secondNoticeId = publishNotice();
+
+        mockMvc.perform(get("/internal/notices/search-source/{id}", firstNoticeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(firstNoticeId))
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
+
+        mockMvc.perform(get("/internal/notices/search-source")
+                        .param("page", "1")
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(secondNoticeId))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(1))
+                .andExpect(jsonPath("$.data.hasNext").value(true));
+    }
+
+    @Test
+    void rejectsSearchSourceOffsetBeyondMapperRange() throws Exception {
+        mockMvc.perform(get("/internal/notices/search-source")
+                        .param("page", String.valueOf(Integer.MAX_VALUE))
+                        .param("pageSize", "100"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40000));
+    }
+
     private long publishNotice() throws Exception {
         String response = mockMvc.perform(post("/api/notices")
                         .header(EMPLOYEE_HEADER, "1")

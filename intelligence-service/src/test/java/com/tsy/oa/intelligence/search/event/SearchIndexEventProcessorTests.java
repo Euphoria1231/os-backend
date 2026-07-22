@@ -2,6 +2,7 @@ package com.tsy.oa.intelligence.search.event;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tsy.oa.intelligence.IntelligenceServiceApplication;
 import com.tsy.oa.intelligence.search.event.source.SearchDocumentSourceGateway;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
@@ -113,6 +114,7 @@ class SearchIndexEventProcessorTests {
         ApplicationSearchDocument sourceDocument = new ApplicationSearchDocument(
                 15L,
                 3L,
+                2L,
                 "LEAVE",
                 "APPROVED",
                 "身体不适",
@@ -140,6 +142,7 @@ class SearchIndexEventProcessorTests {
         ApplicationSearchDocument document = new ApplicationSearchDocument(
                 15L,
                 3L,
+                2L,
                 "LEAVE",
                 "PENDING",
                 "病".repeat(600),
@@ -161,10 +164,40 @@ class SearchIndexEventProcessorTests {
     }
 
     @Test
+    void inlineApplicationDocumentKeepsApproverForManagerAuthorization() throws Exception {
+        ApplicationSearchDocument document = new ApplicationSearchDocument(
+                15L,
+                3L,
+                2L,
+                "LEAVE",
+                "PENDING",
+                "病假申请",
+                LocalDateTime.of(2026, 7, 22, 8, 30),
+                LocalDateTime.of(2026, 7, 22, 8, 30)
+        );
+        ObjectNode source = objectMapper.valueToTree(document);
+        source.put("approverId", 2L);
+        SearchIndexEvent event = new SearchIndexEvent(
+                "application-inline-approver",
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                15L,
+                1L,
+                source
+        );
+
+        assertThat(processor.process(event)).isEqualTo(SearchEventProcessingResult.PROCESSED);
+
+        assertThat(objectMapper.valueToTree(repository.applications.get(15L)).path("approverId").asLong())
+                .isEqualTo(2L);
+    }
+
+    @Test
     void invalidInlineApplicationDocumentIsRejectedBeforeIndexWrite() {
         ApplicationSearchDocument document = new ApplicationSearchDocument(
                 15L,
                 0L,
+                2L,
                 "LEAVE",
                 "PENDING",
                 "申请原因",

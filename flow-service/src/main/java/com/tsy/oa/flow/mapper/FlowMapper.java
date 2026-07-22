@@ -28,4 +28,11 @@ public interface FlowMapper {
     );
 
     List<ApprovalTaskRecord> findCompletedTasksByApprover(Long approverId);
+
+    long countApplications();
+
+    List<FlowApplication> findApplicationPage(
+            @Param("offset") int offset,
+            @Param("pageSize") int pageSize
+    );
 }
