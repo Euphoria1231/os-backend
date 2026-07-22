@@ -98,6 +98,19 @@ OA_DB_PASSWORD=本地MySQL密码
 该配置托管上班时间、迟到阈值、打卡锁过期时间和防重复标记过期时间。修改并发布后，
 `AttendanceClockProperties` 会通过 `@RefreshScope` 动态刷新。
 
+## Elasticsearch 搜索基础
+
+`intelligence-service` 使用与本地服务端完全一致的
+`org.elasticsearch.client:elasticsearch-rest-client:7.13.0`。这里不使用由当前 Spring Data
+默认管理的 8.x 客户端，避免与课程固定的 Elasticsearch 7.13.0 服务端产生版本不兼容。
+
+公告索引名为 `oa-notices-v1`，审批索引名为 `oa-applications-v1`。文档 ID 使用
+`notice-{业务ID}` 和 `application-{业务ID}`，重复写入同一业务数据时会覆盖同一文档，不会新增重复文档。
+
+两个索引的中文字段使用 `ik_max_word` 写入分词和 `ik_smart` 查询分词。因此 Elasticsearch 必须安装
+与服务端同版本的 `analysis-ik 7.13.0`。智能服务启动时会主动检查两个分析器；插件缺失时会明确报告
+需要安装的插件和版本，不会静默改用普通分词器。
+
 ## OpenAPI、Swagger UI 与 Apifox
 
 五个数据与业务服务通过 Springdoc 生成 OpenAPI 3 文档，Gateway 提供统一访问入口：

@@ -16,6 +16,10 @@
     <name>intelligence-service</name>
     <description>Search, AI and dashboard service</description>
 
+    <properties>
+        <elasticsearch-rest-client.version>7.13.0</elasticsearch-rest-client.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.tsy</groupId>
@@ -37,6 +41,12 @@
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
             <version>${mybatis-spring-boot.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>elasticsearch-rest-client</artifactId>
+            <version>${elasticsearch-rest-client.version}</version>
         </dependency>
 
         <dependency>

@@ -20,6 +20,11 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+oa:
+  search:
+    elasticsearch:
+      initialize: false
+
 management:
   endpoints:
     web:

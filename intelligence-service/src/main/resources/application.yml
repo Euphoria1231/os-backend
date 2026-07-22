@@ -32,6 +32,14 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+oa:
+  search:
+    elasticsearch:
+      url: ${ELASTICSEARCH_URL:http://127.0.0.1:9200}
+      notice-index: ${ELASTICSEARCH_NOTICE_INDEX:oa-notices-v1}
+      application-index: ${ELASTICSEARCH_APPLICATION_INDEX:oa-applications-v1}
+      initialize: ${ELASTICSEARCH_INITIALIZE:true}
+
 management:
   endpoints:
     web:
