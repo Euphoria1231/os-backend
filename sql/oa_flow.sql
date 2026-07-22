@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS flow_application (
     end_time DATETIME NOT NULL COMMENT '结束时间',
     reason VARCHAR(500) NOT NULL COMMENT '申请原因',
     status VARCHAR(20) NOT NULL COMMENT '状态：PENDING、APPROVED、REJECTED',
+    process_instance_id VARCHAR(64) NULL COMMENT 'Flowable流程实例ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_flow_application_no (application_no),
+    UNIQUE KEY uk_flow_process_instance (process_instance_id),
     KEY idx_flow_applicant_created (applicant_id, created_at),
     KEY idx_flow_approver_status (approver_id, status)
 ) ENGINE=InnoDB COMMENT='请假与加班申请表';

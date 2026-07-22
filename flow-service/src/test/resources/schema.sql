@@ -11,6 +11,7 @@ CREATE TABLE flow_application (
     end_time TIMESTAMP NOT NULL,
     reason VARCHAR(500) NOT NULL,
     status VARCHAR(20) NOT NULL,
+    process_instance_id VARCHAR(64),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_flow_application_no UNIQUE (application_no)

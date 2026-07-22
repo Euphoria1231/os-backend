@@ -10,12 +10,18 @@ import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
 import com.tsy.oa.flow.mapper.FlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
+import org.flowable.identitylink.api.IdentityLink;
+import org.flowable.task.api.Task;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -24,23 +30,38 @@ public class FlowService {
     private static final String PENDING = "PENDING";
     private static final String APPROVED = "APPROVED";
     private static final String REJECTED = "REJECTED";
+    private static final String LEAVE = "LEAVE";
+    private static final String OVERTIME = "OVERTIME";
+    private static final String APPROVE = "APPROVE";
+    private static final String REJECT = "REJECT";
+    private static final String LEAVE_APPROVAL_KEY = "leave-approval";
+    private static final String OVERTIME_APPROVAL_KEY = "overtime-approval";
 
     private final FlowMapper flowMapper;
     private final EmployeeDirectory employeeDirectory;
+    private final RuntimeService runtimeService;
+    private final TaskService taskService;
 
-    public FlowService(FlowMapper flowMapper, EmployeeDirectory employeeDirectory) {
+    public FlowService(
+            FlowMapper flowMapper,
+            EmployeeDirectory employeeDirectory,
+            RuntimeService runtimeService,
+            TaskService taskService
+    ) {
         this.flowMapper = flowMapper;
         this.employeeDirectory = employeeDirectory;
+        this.runtimeService = runtimeService;
+        this.taskService = taskService;
     }
 
     @Transactional
     public FlowApplicationResponse submitLeave(Long applicantId, ApplicationRequest request) {
-        return submit(applicantId, "LEAVE", request);
+        return submit(applicantId, LEAVE, request);
     }
 
     @Transactional
     public FlowApplicationResponse submitOvertime(Long applicantId, ApplicationRequest request) {
-        return submit(applicantId, "OVERTIME", request);
+        return submit(applicantId, OVERTIME, request);
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +91,7 @@ public class FlowService {
             Long approverId,
             ApprovalRequest request
     ) {
-        return process(applicationId, approverId, "APPROVE", APPROVED, request.comment());
+        return process(applicationId, approverId, APPROVE, request.comment());
     }
 
     @Transactional
@@ -79,7 +100,7 @@ public class FlowService {
             Long approverId,
             ApprovalRequest request
     ) {
-        return process(applicationId, approverId, "REJECT", REJECTED, request.comment());
+        return process(applicationId, approverId, REJECT, request.comment());
     }
 
     private FlowApplicationResponse submit(
@@ -94,6 +115,13 @@ public class FlowService {
         if (approverId == null) {
             throw new BusinessException(FlowErrorCode.DIRECT_LEADER_MISSING);
         }
+        Long secondApproverId = null;
+        if (LEAVE.equals(applicationType)) {
+            secondApproverId = employeeDirectory.findDirectLeaderId(approverId);
+            if (secondApproverId == null) {
+                throw new BusinessException(FlowErrorCode.SECOND_APPROVER_MISSING);
+            }
+        }
 
         FlowApplication application = new FlowApplication();
         application.setApplicationNo(generateApplicationNo(applicationType));
@@ -105,6 +133,20 @@ public class FlowService {
         application.setReason(request.reason().trim());
         application.setStatus(PENDING);
         flowMapper.insertApplication(application);
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("applicantId", String.valueOf(applicantId));
+        variables.put("directLeaderId", String.valueOf(approverId));
+        if (secondApproverId != null) {
+            variables.put("secondApproverId", String.valueOf(secondApproverId));
+        }
+        String processInstanceId = runtimeService.startProcessInstanceByKey(
+                processDefinitionKey(applicationType),
+                String.valueOf(application.getId()),
+                variables
+        ).getId();
+        // Business rows and Flowable runtime tables share this local transaction.
+        flowMapper.updateProcessInstanceId(application.getId(), processInstanceId);
         return FlowApplicationResponse.from(requireApplication(application.getId()));
     }
 
@@ -112,26 +154,71 @@ public class FlowService {
             Long applicationId,
             Long approverId,
             String action,
-            String targetStatus,
             String comment
     ) {
         FlowApplication application = requireApplication(applicationId);
-        if (!application.getApproverId().equals(approverId)) {
-            throw new BusinessException(FlowErrorCode.NOT_APPROVER);
-        }
         if (!PENDING.equals(application.getStatus())) {
             throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
-        if (flowMapper.updateApplicationStatusIfPending(applicationId, targetStatus) == 0) {
-            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        if (application.getApplicantId().equals(approverId)) {
+            throw new BusinessException(FlowErrorCode.SELF_APPROVAL_FORBIDDEN);
         }
+        Task currentTask = taskService.createTaskQuery()
+                .processInstanceId(application.getProcessInstanceId())
+                .taskCandidateOrAssigned(String.valueOf(approverId))
+                .singleResult();
+        if (currentTask == null) {
+            throw new BusinessException(FlowErrorCode.NOT_APPROVER);
+        }
+
+        boolean approved = APPROVE.equals(action);
+        taskService.complete(currentTask.getId(), Map.of("approved", approved));
         flowMapper.insertApprovalRecord(
                 applicationId,
                 approverId,
                 action,
                 comment == null || comment.isBlank() ? null : comment.trim()
         );
+        if (!approved) {
+            updateStatus(applicationId, REJECTED);
+        } else if (isProcessEnded(application.getProcessInstanceId())) {
+            updateStatus(applicationId, APPROVED);
+        } else {
+            flowMapper.updateCurrentApproverIfPending(
+                    applicationId,
+                    findNextApproverId(application.getProcessInstanceId())
+            );
+        }
         return FlowApplicationResponse.from(requireApplication(applicationId));
+    }
+
+    private void updateStatus(Long applicationId, String status) {
+        if (flowMapper.updateApplicationStatusIfPending(applicationId, status) == 0) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        }
+    }
+
+    private boolean isProcessEnded(String processInstanceId) {
+        return runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult() == null;
+    }
+
+    private Long findNextApproverId(String processInstanceId) {
+        Task nextTask = taskService.createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .active()
+                .singleResult();
+        if (nextTask == null) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        }
+        return taskService.getIdentityLinksForTask(nextTask.getId()).stream()
+                .filter(identityLink -> "candidate".equals(identityLink.getType()))
+                .map(IdentityLink::getUserId)
+                .filter(userId -> userId != null && !userId.isBlank())
+                .map(Long::valueOf)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(FlowErrorCode.SECOND_APPROVER_MISSING));
     }
 
     private FlowApplication requireApplication(Long id) {
@@ -146,5 +233,13 @@ public class FlowService {
         String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
         return applicationType.substring(0, 1) + date + suffix;
+    }
+
+    private String processDefinitionKey(String applicationType) {
+        return switch (applicationType) {
+            case LEAVE -> LEAVE_APPROVAL_KEY;
+            case OVERTIME -> OVERTIME_APPROVAL_KEY;
+            default -> throw new BusinessException(CommonErrorCode.BAD_REQUEST);
+        };
     }
 }

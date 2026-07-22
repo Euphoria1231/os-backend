@@ -20,6 +20,10 @@ public interface FlowMapper {
 
     int updateApplicationStatusIfPending(@Param("id") Long id, @Param("status") String status);
 
+    int updateProcessInstanceId(@Param("id") Long id, @Param("processInstanceId") String processInstanceId);
+
+    int updateCurrentApproverIfPending(@Param("id") Long id, @Param("approverId") Long approverId);
+
     int insertApprovalRecord(
             @Param("applicationId") Long applicationId,
             @Param("approverId") Long approverId,

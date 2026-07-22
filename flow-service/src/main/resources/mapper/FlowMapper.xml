@@ -12,6 +12,7 @@
         <result property="endTime" column="end_time"/>
         <result property="reason" column="reason"/>
         <result property="status" column="status"/>
+        <result property="processInstanceId" column="process_instance_id"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
@@ -28,7 +29,7 @@
 
     <sql id="ApplicationColumns">
         id, application_no, applicant_id, approver_id, application_type,
-        start_time, end_time, reason, status, created_at, updated_at
+        start_time, end_time, reason, status, process_instance_id, created_at, updated_at
     </sql>
 
     <insert id="insertApplication" useGeneratedKeys="true" keyProperty="id">
@@ -63,6 +64,18 @@
     <update id="updateApplicationStatusIfPending">
         UPDATE flow_application
         SET status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <update id="updateProcessInstanceId">
+        UPDATE flow_application
+        SET process_instance_id = #{processInstanceId}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateCurrentApproverIfPending">
+        UPDATE flow_application
+        SET approver_id = #{approverId}, updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id} AND status = 'PENDING'
     </update>
 

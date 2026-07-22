@@ -53,11 +53,18 @@ class FlowControllerTests {
         jdbcTemplate.update("DELETE FROM flow_application");
         employeeDirectory.clear();
         employeeDirectory.setLeader(10L, 20L);
+        employeeDirectory.setLeader(20L, 30L);
     }
 
     @Test
-    void submitsLeaveAndCompletesLeaderApproval() throws Exception {
+    void submitsLeaveAndCompletesTwoLevelApproval() throws Exception {
         long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+        String processInstanceId = jdbcTemplate.queryForObject(
+                "SELECT process_instance_id FROM flow_application WHERE id = ?",
+                String.class,
+                applicationId
+        );
+        org.assertj.core.api.Assertions.assertThat(processInstanceId).isNotBlank();
 
         mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
@@ -69,14 +76,26 @@ class FlowControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"comment\":\"同意，请做好工作交接\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.approverId").value(30));
 
         mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(applicationId));
         mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].action").value("APPROVE"));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"二级审批同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
         mockMvc.perform(get("/api/flow/applications/mine").header(EMPLOYEE_HEADER, "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("APPROVED"));
@@ -107,6 +126,38 @@ class FlowControllerTests {
     }
 
     @Test
+    void rejectsDuplicateApprovalHandling() throws Exception {
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "版本上线");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"重复审批\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40901));
+    }
+
+    @Test
+    void rejectsSelfApproval() throws Exception {
+        employeeDirectory.setLeader(10L, 10L);
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "紧急修复", 10L);
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"自己审批自己\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40302));
+    }
+
+    @Test
     void rejectsSubmissionWithoutDirectLeader() throws Exception {
         employeeDirectory.clear();
 
@@ -131,13 +182,17 @@ class FlowControllerTests {
     }
 
     private long submit(String path, Long applicantId, String reason) throws Exception {
+        return submit(path, applicantId, reason, 20L);
+    }
+
+    private long submit(String path, Long applicantId, String reason, Long expectedApproverId) throws Exception {
         String response = mockMvc.perform(post(path)
                         .header(EMPLOYEE_HEADER, applicantId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(applicationJson(reason)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
-                .andExpect(jsonPath("$.data.approverId").value(20))
+                .andExpect(jsonPath("$.data.approverId").value(expectedApproverId))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
