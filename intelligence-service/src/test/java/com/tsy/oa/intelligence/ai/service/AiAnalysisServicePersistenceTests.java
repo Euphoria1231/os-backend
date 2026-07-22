@@ -34,10 +34,11 @@ class AiAnalysisServicePersistenceTests {
 
     @Test
     void recordsOnlyAuditableMetadataAndReferenceOnlySummary() {
+        String sensitivePrompt = "Do not persist this sensitive prompt";
         var result = service.analyze(new AiAnalysisRequest(
                 "ATTENDANCE",
                 "attendance-42",
-                "Do not persist this sensitive prompt"
+                sensitivePrompt
         ));
 
         assertThat(result.status()).isEqualTo(AiCallStatus.SUCCESS);
@@ -51,13 +52,30 @@ class AiAnalysisServicePersistenceTests {
                 String.class,
                 "attendance-42"
         )).isEqualTo("SUCCESS");
-        assertThat(jdbcTemplate.queryForObject(
+        String resultSummary = jdbcTemplate.queryForObject(
                 "SELECT result_summary FROM ai_analysis_record WHERE business_reference_id = ?",
                 String.class,
                 "attendance-42"
-        )).contains("仅供参考");
+        );
+        assertThat(resultSummary).contains("仅供参考").doesNotContain(sensitivePrompt);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'ai_analysis_record' AND column_name = 'prompt'",
+                "SELECT business_reference_id FROM ai_analysis_record WHERE request_type = ?",
+                String.class,
+                "ATTENDANCE"
+        )).isEqualTo("attendance-42");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT duration_ms FROM ai_analysis_record WHERE business_reference_id = ?",
+                Long.class,
+                "attendance-42"
+        )).isGreaterThanOrEqualTo(0L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT audited_at FROM ai_analysis_record WHERE business_reference_id = ?",
+                java.time.LocalDateTime.class,
+                "attendance-42"
+        )).isNotNull();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'ai_analysis_record' "
+                        + "AND column_name IN ('prompt', 'api_key', 'request_body')",
                 Integer.class
         )).isZero();
     }
@@ -70,7 +88,7 @@ class AiAnalysisServicePersistenceTests {
         AiProvider testAiProvider() {
             return (AiPrompt prompt) -> new AiCallResult(
                     AiCallStatus.SUCCESS,
-                    "仅供参考：测试摘要"
+                    prompt.content()
             );
         }
     }

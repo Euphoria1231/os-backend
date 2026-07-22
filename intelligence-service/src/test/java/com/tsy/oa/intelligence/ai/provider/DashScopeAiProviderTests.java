@@ -60,6 +60,16 @@ class DashScopeAiProviderTests {
     }
 
     @Test
+    void responseWithoutChoicesReturnsSafeFailureResult() {
+        DashScopeAiProvider provider = provider((request) -> new AiHttpResponse(200, "{\"id\":\"request-id\"}"));
+
+        var result = provider.generate(new AiPrompt("ATTENDANCE", "attendance-42", "敏感提示词"));
+
+        assertThat(result.status()).isEqualTo(AiCallStatus.FAILED);
+        assertThat(result.displayText()).contains("仅供参考").doesNotContain("敏感提示词");
+    }
+
+    @Test
     void missingApiKeyReturnsSafeDegradedResultWithoutMakingHttpCall() {
         AiProperties properties = new AiProperties();
         properties.setApiKey("");

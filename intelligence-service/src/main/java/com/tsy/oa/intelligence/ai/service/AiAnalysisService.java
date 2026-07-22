@@ -2,6 +2,7 @@ package com.tsy.oa.intelligence.ai.service;
 
 import com.tsy.oa.intelligence.ai.AiProvider;
 import com.tsy.oa.intelligence.ai.model.AiCallResult;
+import com.tsy.oa.intelligence.ai.model.AiCallStatus;
 import com.tsy.oa.intelligence.ai.model.AiPrompt;
 import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord;
 import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper;
@@ -11,8 +12,6 @@ import java.time.LocalDateTime;
 
 @Service
 public class AiAnalysisService {
-
-    private static final int RESULT_SUMMARY_LIMIT = 500;
 
     private final AiProvider aiProvider;
     private final AiAnalysisRecordMapper recordMapper;
@@ -35,15 +34,17 @@ public class AiAnalysisService {
                 request.businessReferenceId(),
                 result.status().name(),
                 durationMs,
-                summary(result.displayText()),
+                summary(request.requestType(), result.status()),
                 LocalDateTime.now()
         ));
         return result;
     }
 
-    private String summary(String displayText) {
-        return displayText.length() <= RESULT_SUMMARY_LIMIT
-                ? displayText
-                : displayText.substring(0, RESULT_SUMMARY_LIMIT);
+    private String summary(String requestType, AiCallStatus status) {
+        return switch (status) {
+            case SUCCESS -> "仅供参考：" + requestType + " AI analysis completed.";
+            case DEGRADED -> "仅供参考：" + requestType + " AI analysis is degraded.";
+            case FAILED -> "仅供参考：" + requestType + " AI analysis failed.";
+        };
     }
 }
