@@ -13,12 +13,15 @@ import java.time.LocalTime;
 public class AttendanceClockProperties {
 
     private LocalTime workStartTime = LocalTime.of(9, 0);
+    private LocalTime workEndTime = LocalTime.of(18, 0);
     private int lateThresholdMinutes;
     private Duration lockTtl = Duration.ofSeconds(10);
     private Duration completedMarkerTtl = Duration.ofHours(36);
 
     public LocalTime getWorkStartTime() { return workStartTime; }
     public void setWorkStartTime(LocalTime workStartTime) { this.workStartTime = workStartTime; }
+    public LocalTime getWorkEndTime() { return workEndTime; }
+    public void setWorkEndTime(LocalTime workEndTime) { this.workEndTime = workEndTime; }
     public int getLateThresholdMinutes() { return lateThresholdMinutes; }
     public void setLateThresholdMinutes(int lateThresholdMinutes) { this.lateThresholdMinutes = lateThresholdMinutes; }
     public Duration getLockTtl() { return lockTtl; }

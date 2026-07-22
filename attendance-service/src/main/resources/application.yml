@@ -41,6 +41,7 @@ mybatis:
 attendance:
   clock:
     work-start-time: ${ATTENDANCE_WORK_START_TIME:09:00}
+    work-end-time: ${ATTENDANCE_WORK_END_TIME:18:00}
     late-threshold-minutes: ${ATTENDANCE_LATE_THRESHOLD_MINUTES:0}
     lock-ttl: ${ATTENDANCE_LOCK_TTL:PT10S}
     completed-marker-ttl: ${ATTENDANCE_COMPLETED_MARKER_TTL:PT36H}
