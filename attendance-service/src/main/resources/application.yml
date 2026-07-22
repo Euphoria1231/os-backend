@@ -7,7 +7,7 @@ spring:
   datasource:
     url: ${OA_ATTENDANCE_DB_URL:jdbc:mysql://127.0.0.1:3306/oa_attendance?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${OA_ATTENDANCE_DB_USERNAME:root}
-    password: ${OA_ATTENDANCE_DB_PASSWORD:}
+    password: ${OA_ATTENDANCE_DB_PASSWORD:${OA_DB_PASSWORD:}}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
@@ -17,6 +17,8 @@ spring:
       database: ${REDIS_DATABASE:0}
   config:
     import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
       - optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:

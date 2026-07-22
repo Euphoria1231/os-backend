@@ -112,6 +112,18 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.data[0].employeeId").value(10));
     }
 
+    @Test
+    void exposesOpenApiDocument() throws Exception {
+        mockMvc.perform(get("/v3/api-docs")
+                        .header("X-Forwarded-Host", "localhost")
+                        .header("X-Forwarded-Port", "8088")
+                        .header("X-Forwarded-Proto", "http"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").isNotEmpty())
+                .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
+                .andExpect(jsonPath("$.paths['/api/attendance/clock-in']").exists());
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.attendance")

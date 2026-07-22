@@ -12,6 +12,8 @@ spring:
       database: ${REDIS_DATABASE:0}
   config:
     import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
       - optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
@@ -39,6 +41,30 @@ spring:
                 allow-credentials: true
                 max-age: 3600
           routes:
+            - id: user-openapi
+              uri: lb://user-service
+              predicates:
+                - Path=/openapi/user
+              filters:
+                - SetPath=/v3/api-docs
+            - id: attendance-openapi
+              uri: lb://attendance-service
+              predicates:
+                - Path=/openapi/attendance
+              filters:
+                - SetPath=/v3/api-docs
+            - id: flow-openapi
+              uri: lb://flow-service
+              predicates:
+                - Path=/openapi/flow
+              filters:
+                - SetPath=/v3/api-docs
+            - id: notice-openapi
+              uri: lb://notice-service
+              predicates:
+                - Path=/openapi/notice
+              filters:
+                - SetPath=/v3/api-docs
             - id: user-service
               uri: lb://user-service
               predicates:
@@ -66,3 +92,17 @@ security:
   jwt:
     secret: ${JWT_SECRET}
     validity: ${JWT_VALIDITY:PT2H}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    urls:
+      - name: 用户与权限服务
+        url: /openapi/user
+      - name: 考勤服务
+        url: /openapi/attendance
+      - name: 审批服务
+        url: /openapi/flow
+      - name: 公告服务
+        url: /openapi/notice

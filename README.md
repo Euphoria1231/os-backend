@@ -54,46 +54,34 @@ mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_notice.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\init_data.sql
 ```
 
-## 配置环境变量
+## 配置本地环境
 
-`user-service` 和 `oa-gateway` 必须使用相同的 `JWT_SECRET`。密钥不得提交到 Git，且长度至少为
-32 字节。下面仅为本地设置方式，每个启动服务的终端都要能够读取所需变量：
+本地开发默认使用以下地址，无需写入环境文件：
+
+- MySQL：`127.0.0.1:3306`，用户名 `root`
+- Redis：`127.0.0.1:6379`，无密码，数据库 `0`
+- Nacos：`127.0.0.1:8848`，public namespace，不启用认证
+
+复制环境变量示例文件：
 
 ```powershell
-$env:JWT_SECRET = 'replace-with-a-random-secret-of-at-least-32-bytes'
-$env:NACOS_SERVER_ADDR = '127.0.0.1:8848'
-
-# 仅在 Nacos 服务器启用认证时设置
-$env:NACOS_USERNAME = 'your-nacos-username'
-$env:NACOS_PASSWORD = 'your-nacos-password'
-
-$env:OA_USER_DB_PASSWORD = 'your-mysql-password'
-$env:OA_ATTENDANCE_DB_PASSWORD = 'your-mysql-password'
-$env:OA_FLOW_DB_PASSWORD = 'your-mysql-password'
-$env:OA_NOTICE_DB_PASSWORD = 'your-mysql-password'
-
-$env:REDIS_HOST = '127.0.0.1'
-$env:REDIS_PORT = '6379'
+Copy-Item .env.example .env
 ```
 
-各服务支持的主要变量如下：
+然后只需要在 `.env` 中填写两个本地值：
 
-| 变量 | 说明 | 默认值 |
-| --- | --- | --- |
-| `JWT_SECRET` | JWT 签名密钥，Gateway 与用户服务必须一致 | 无，必须设置 |
-| `JWT_VALIDITY` | Token 有效期 | `PT2H` |
-| `NACOS_SERVER_ADDR` | Nacos 地址 | `127.0.0.1:8848` |
-| `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 登录信息，仅启用认证时设置 | 空 |
-| `NACOS_NAMESPACE` | Nacos namespace ID | 空，即 public |
-| `OA_*_DB_URL` | 对应微服务的 JDBC URL | 本机对应逻辑数据库 |
-| `OA_*_DB_USERNAME` | 对应微服务的数据库账号 | `root` |
-| `OA_*_DB_PASSWORD` | 对应微服务的数据库密码 | 空 |
-| `REDIS_HOST` / `REDIS_PORT` | Gateway 与考勤服务使用的 Redis 地址 | `127.0.0.1` / `6379` |
-| `REDIS_PASSWORD` / `REDIS_DATABASE` | Gateway 与考勤服务的 Redis 认证和库编号 | 空 / `0` |
+```properties
+JWT_SECRET=一段至少32字节的随机密钥
+OA_DB_PASSWORD=本地MySQL密码
+```
 
-`user-service` 使用 Spring Boot 标准 Redis 配置；需要修改默认地址时，在该服务的运行配置中设置
-`SPRING_DATA_REDIS_HOST`、`SPRING_DATA_REDIS_PORT`、`SPRING_DATA_REDIS_PASSWORD` 和
-`SPRING_DATA_REDIS_DATABASE`。
+五个服务会在从后端根目录或各自模块目录启动时自动读取同一份根目录 `.env`。其中
+`user-service` 和 `oa-gateway` 会共享 `JWT_SECRET`，四个业务服务会共享 `OA_DB_PASSWORD`。
+真实 `.env` 已被 Git 忽略，不得提交。
+
+需要连接非本地环境时，仍可通过原有的 `NACOS_*`、`REDIS_*`、`OA_*_DB_URL`、
+`OA_*_DB_USERNAME` 和服务专用 `OA_*_DB_PASSWORD` 覆盖默认值；服务专用数据库密码的优先级高于
+统一的 `OA_DB_PASSWORD`。
 
 ## 发布 Nacos 配置
 
@@ -106,6 +94,21 @@ $env:REDIS_PORT = '6379'
 
 该配置托管上班时间、迟到阈值、打卡锁过期时间和防重复标记过期时间。修改并发布后，
 `AttendanceClockProperties` 会通过 `@RefreshScope` 动态刷新。
+
+## OpenAPI、Swagger UI 与 Apifox
+
+四个业务服务通过 Springdoc 生成 OpenAPI 3 文档，Gateway 提供统一访问入口：
+
+| 服务 | OpenAPI 地址 |
+| --- | --- |
+| 用户与权限 | `http://localhost:8088/openapi/user` |
+| 考勤 | `http://localhost:8088/openapi/attendance` |
+| 审批 | `http://localhost:8088/openapi/flow` |
+| 公告 | `http://localhost:8088/openapi/notice` |
+
+聚合 Swagger UI 地址为 `http://localhost:8088/swagger-ui.html`，可以通过页面顶部下拉框切换服务。
+在 Apifox 中选择 OpenAPI/Swagger 导入，依次导入上述四个 OpenAPI 地址即可同步到同一个项目。
+接口请求仍统一使用 `http://localhost:8088` 作为环境 Base URL。
 
 ## 启动服务
 

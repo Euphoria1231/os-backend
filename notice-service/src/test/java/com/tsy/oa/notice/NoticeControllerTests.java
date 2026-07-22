@@ -99,6 +99,18 @@ class NoticeControllerTests {
                 .andExpect(jsonPath("$.code").value(40401));
     }
 
+    @Test
+    void exposesOpenApiDocument() throws Exception {
+        mockMvc.perform(get("/v3/api-docs")
+                        .header("X-Forwarded-Host", "localhost")
+                        .header("X-Forwarded-Port", "8088")
+                        .header("X-Forwarded-Proto", "http"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").isNotEmpty())
+                .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
+                .andExpect(jsonPath("$.paths['/api/notices']").exists());
+    }
+
     private long publishNotice() throws Exception {
         String response = mockMvc.perform(post("/api/notices")
                         .header(EMPLOYEE_HEADER, "1")

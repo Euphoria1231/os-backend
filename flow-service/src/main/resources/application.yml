@@ -7,10 +7,12 @@ spring:
   datasource:
     url: ${OA_FLOW_DB_URL:jdbc:mysql://127.0.0.1:3306/oa_flow?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${OA_FLOW_DB_USERNAME:root}
-    password: ${OA_FLOW_DB_PASSWORD:}
+    password: ${OA_FLOW_DB_PASSWORD:${OA_DB_PASSWORD:}}
     driver-class-name: com.mysql.cj.jdbc.Driver
   config:
     import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
       - optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:

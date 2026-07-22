@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 .m2-repository
+
+### Local environment ###
+.env

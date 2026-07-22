@@ -7,11 +7,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -46,5 +49,26 @@ class UserServiceApplicationTests {
         assertEquals(0, body.code());
         assertEquals("success", body.message());
         assertEquals("user-service", body.data());
+    }
+
+    @Test
+    void exposesOpenApiDocument() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Forwarded-Host", "localhost");
+        headers.set("X-Forwarded-Port", "8088");
+        headers.set("X-Forwarded-Proto", "http");
+        ResponseEntity<String> response = restTemplate.exchange(
+                "/v3/api-docs",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        String body = response.getBody();
+        assertNotNull(body);
+        assertTrue(body.contains("\"openapi\""));
+        assertTrue(body.contains("/api/user/auth/login"));
+        assertTrue(body.contains("\"url\":\"http://localhost:8088\""));
     }
 }
