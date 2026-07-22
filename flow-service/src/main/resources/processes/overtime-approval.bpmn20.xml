@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://tsy.com/oa/flow">
+    <process id="overtime-approval" name="加班审批流程" isExecutable="true">
+        <startEvent id="startOvertimeApproval" name="提交加班申请"/>
+        <sequenceFlow id="flowStartToDirectLeader" sourceRef="startOvertimeApproval" targetRef="directLeaderApproval"/>
+
+        <userTask id="directLeaderApproval" name="直属领导审批" flowable:candidateUsers="${directLeaderId}"/>
+        <sequenceFlow id="flowDirectLeaderToDecision" sourceRef="directLeaderApproval" targetRef="directLeaderDecision"/>
+
+        <exclusiveGateway id="directLeaderDecision" name="直属领导审批结果"/>
+        <sequenceFlow id="flowDirectLeaderApproved" sourceRef="directLeaderDecision" targetRef="overtimeApproved">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="flowDirectLeaderRejected" sourceRef="directLeaderDecision" targetRef="overtimeRejected">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == false}]]></conditionExpression>
+        </sequenceFlow>
+
+        <endEvent id="overtimeApproved" name="加班审批通过"/>
+        <endEvent id="overtimeRejected" name="加班审批驳回"/>
+    </process>
+</definitions>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://tsy.com/oa/flow">
+    <process id="leave-approval" name="请假审批流程" isExecutable="true">
+        <startEvent id="startLeaveApproval" name="提交请假申请"/>
+        <sequenceFlow id="flowStartToDirectLeader" sourceRef="startLeaveApproval" targetRef="directLeaderApproval"/>
+
+        <userTask id="directLeaderApproval" name="直属领导审批" flowable:candidateUsers="${directLeaderId}"/>
+        <sequenceFlow id="flowDirectLeaderToDecision" sourceRef="directLeaderApproval" targetRef="directLeaderDecision"/>
+
+        <exclusiveGateway id="directLeaderDecision" name="直属领导审批结果"/>
+        <sequenceFlow id="flowDirectLeaderApproved" sourceRef="directLeaderDecision" targetRef="secondApproverApproval">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="flowDirectLeaderRejected" sourceRef="directLeaderDecision" targetRef="leaveRejected">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == false}]]></conditionExpression>
+        </sequenceFlow>
+
+        <userTask id="secondApproverApproval" name="二级审批" flowable:candidateUsers="${secondApproverId}"/>
+        <sequenceFlow id="flowSecondApproverToDecision" sourceRef="secondApproverApproval" targetRef="secondApproverDecision"/>
+
+        <exclusiveGateway id="secondApproverDecision" name="二级审批结果"/>
+        <sequenceFlow id="flowSecondApproverApproved" sourceRef="secondApproverDecision" targetRef="leaveApproved">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="flowSecondApproverRejected" sourceRef="secondApproverDecision" targetRef="leaveRejected">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == false}]]></conditionExpression>
+        </sequenceFlow>
+
+        <endEvent id="leaveApproved" name="请假审批通过"/>
+        <endEvent id="leaveRejected" name="请假审批驳回"/>
+    </process>
+</definitions>
