@@ -118,7 +118,7 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
             return;
         }
         ApplicationSearchDocument document = readDocument(event, ApplicationSearchDocument.class);
-        if (document == null) {
+        if (document == null || document.approverId() <= 0) {
             document = sourceGateway.loadApplication(event.aggregateId());
         }
         document = documentNormalizer.normalizeApplication(document);

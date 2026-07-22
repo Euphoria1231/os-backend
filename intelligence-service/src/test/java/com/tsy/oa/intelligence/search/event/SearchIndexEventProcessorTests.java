@@ -10,6 +10,8 @@ import com.tsy.oa.intelligence.search.model.NoticeSearchDocument;
 import com.tsy.oa.intelligence.search.repository.SearchIndexRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -28,8 +30,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(classes = IntelligenceServiceApplication.class)
@@ -132,7 +136,6 @@ class SearchIndexEventProcessorTests {
         );
 
         assertThat(processor.process(event)).isEqualTo(SearchEventProcessingResult.PROCESSED);
-
         assertThat(sourceGateway.applicationLoadCount).isEqualTo(1);
         assertThat(repository.applications.get(15L)).isEqualTo(sourceDocument);
     }
@@ -190,6 +193,44 @@ class SearchIndexEventProcessorTests {
 
         assertThat(objectMapper.valueToTree(repository.applications.get(15L)).path("approverId").asLong())
                 .isEqualTo(2L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void legacyInlineApplicationWithoutValidApproverLoadsCanonicalSourceOnce(boolean omitApproverId)
+            throws Exception {
+        ApplicationSearchDocument canonicalDocument = new ApplicationSearchDocument(
+                15L,
+                3L,
+                2L,
+                "LEAVE",
+                "PENDING",
+                "Legacy application",
+                LocalDateTime.of(2026, 7, 22, 8, 30),
+                LocalDateTime.of(2026, 7, 22, 8, 30)
+        );
+        sourceGateway.applications.put(15L, canonicalDocument);
+        ObjectNode legacyDocument = objectMapper.valueToTree(canonicalDocument);
+        if (omitApproverId) {
+            legacyDocument.remove("approverId");
+        } else {
+            legacyDocument.put("approverId", 0L);
+        }
+        SearchIndexEvent event = new SearchIndexEvent(
+                "legacy-application-" + omitApproverId,
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                15L,
+                1L,
+                legacyDocument
+        );
+
+        AtomicReference<SearchEventProcessingResult> result = new AtomicReference<>();
+        assertThatCode(() -> result.set(processor.process(event))).doesNotThrowAnyException();
+
+        assertThat(result.get()).isEqualTo(SearchEventProcessingResult.PROCESSED);
+        assertThat(sourceGateway.applicationLoadCount).isEqualTo(1);
+        assertThat(repository.applications.get(15L).approverId()).isEqualTo(2L);
     }
 
     @Test

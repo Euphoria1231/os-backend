@@ -1,5 +1,6 @@
 package com.tsy.oa.intelligence.search.repository;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.intelligence.search.config.ElasticsearchSearchProperties;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
@@ -34,7 +35,7 @@ public class ElasticsearchSearchIndexRepository implements SearchIndexRepository
     public void saveNotice(NoticeSearchDocument document) throws IOException {
         Objects.requireNonNull(document, "document must not be null");
         gateway.upsertDocument(
-                properties.getNoticeIndex(),
+                properties.getNoticeAlias(),
                 NOTICE_ID_PREFIX + document.noticeId(),
                 objectMapper.writeValueAsString(document)
         );
@@ -42,14 +43,14 @@ public class ElasticsearchSearchIndexRepository implements SearchIndexRepository
 
     @Override
     public void deleteNotice(long noticeId) throws IOException {
-        gateway.deleteDocument(properties.getNoticeIndex(), NOTICE_ID_PREFIX + noticeId);
+        gateway.deleteDocument(properties.getNoticeAlias(), NOTICE_ID_PREFIX + noticeId);
     }
 
     @Override
     public void saveApplication(ApplicationSearchDocument document) throws IOException {
         Objects.requireNonNull(document, "document must not be null");
         gateway.upsertDocument(
-                properties.getApplicationIndex(),
+                properties.getApplicationAlias(),
                 APPLICATION_ID_PREFIX + document.applicationId(),
                 objectMapper.writeValueAsString(document)
         );
@@ -57,20 +58,36 @@ public class ElasticsearchSearchIndexRepository implements SearchIndexRepository
 
     @Override
     public void deleteApplication(long applicationId) throws IOException {
-        gateway.deleteDocument(properties.getApplicationIndex(), APPLICATION_ID_PREFIX + applicationId);
+        gateway.deleteDocument(properties.getApplicationAlias(), APPLICATION_ID_PREFIX + applicationId);
     }
 
     @Override
     public void saveNotices(List<NoticeSearchDocument> documents) throws IOException {
-        bulkSave(properties.getNoticeIndex(), NOTICE_ID_PREFIX, documents, NoticeSearchDocument::noticeId);
+        bulkSave(properties.getNoticeAlias(), NOTICE_ID_PREFIX, documents, NoticeSearchDocument::noticeId);
+    }
+
+    @Override
+    public void saveNoticesToIndex(
+            String indexName,
+            List<NoticeSearchDocument> documents
+    ) throws IOException {
+        bulkSave(indexName, NOTICE_ID_PREFIX, documents, NoticeSearchDocument::noticeId);
     }
 
     @Override
     public void saveApplications(List<ApplicationSearchDocument> documents) throws IOException {
         bulkSave(
-                properties.getApplicationIndex(), APPLICATION_ID_PREFIX,
+                properties.getApplicationAlias(), APPLICATION_ID_PREFIX,
                 documents, ApplicationSearchDocument::applicationId
         );
+    }
+
+    @Override
+    public void saveApplicationsToIndex(
+            String indexName,
+            List<ApplicationSearchDocument> documents
+    ) throws IOException {
+        bulkSave(indexName, APPLICATION_ID_PREFIX, documents, ApplicationSearchDocument::applicationId);
     }
 
     private <T> void bulkSave(
@@ -95,8 +112,25 @@ public class ElasticsearchSearchIndexRepository implements SearchIndexRepository
             requestBody.append(objectMapper.writeValueAsString(document)).append('\n');
         }
         String response = gateway.bulk(requestBody.toString());
-        if (objectMapper.readTree(response).path("errors").asBoolean()) {
-            throw new IOException("Elasticsearch bulk request contains failed items");
+        JsonNode body = objectMapper.readTree(response);
+        JsonNode errors = body.get("errors");
+        if (errors == null || !errors.isBoolean()) {
+            throw new IOException("Elasticsearch bulk response has no boolean errors field");
+        }
+        JsonNode items = body.get("items");
+        if (items == null || !items.isArray() || items.size() != documents.size()) {
+            throw new IOException("Elasticsearch bulk response item count does not match request");
+        }
+        long failedItems = 0;
+        for (JsonNode item : items) {
+            JsonNode result = item.path("index");
+            int status = result.path("status").asInt(500);
+            if (status < 200 || status >= 300 || result.has("error")) {
+                failedItems++;
+            }
+        }
+        if (errors.booleanValue() || failedItems > 0) {
+            throw new IOException("Elasticsearch bulk request contains " + failedItems + " failed items");
         }
     }
 }

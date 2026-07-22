@@ -41,6 +41,8 @@ oa:
       url: ${ELASTICSEARCH_URL:http://127.0.0.1:9200}
       notice-index: ${ELASTICSEARCH_NOTICE_INDEX:oa-notices-v1}
       application-index: ${ELASTICSEARCH_APPLICATION_INDEX:oa-applications-v1}
+      notice-alias: ${ELASTICSEARCH_NOTICE_ALIAS:oa-notices}
+      application-alias: ${ELASTICSEARCH_APPLICATION_ALIAS:oa-applications}
       initialize: ${ELASTICSEARCH_INITIALIZE:true}
     events:
       enabled: ${SEARCH_INDEX_EVENTS_ENABLED:true}

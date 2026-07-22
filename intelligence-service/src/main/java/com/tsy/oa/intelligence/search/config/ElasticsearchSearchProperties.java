@@ -17,6 +17,12 @@ public class ElasticsearchSearchProperties {
     @NotBlank
     private String applicationIndex = "oa-applications-v1";
 
+    @NotBlank
+    private String noticeAlias = "oa-notices";
+
+    @NotBlank
+    private String applicationAlias = "oa-applications";
+
     private boolean initialize = true;
 
     public String getUrl() {
@@ -41,6 +47,22 @@ public class ElasticsearchSearchProperties {
 
     public void setApplicationIndex(String applicationIndex) {
         this.applicationIndex = applicationIndex;
+    }
+
+    public String getNoticeAlias() {
+        return noticeAlias;
+    }
+
+    public void setNoticeAlias(String noticeAlias) {
+        this.noticeAlias = noticeAlias;
+    }
+
+    public String getApplicationAlias() {
+        return applicationAlias;
+    }
+
+    public void setApplicationAlias(String applicationAlias) {
+        this.applicationAlias = applicationAlias;
     }
 
     public boolean isInitialize() {

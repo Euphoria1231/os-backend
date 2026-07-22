@@ -7,6 +7,6 @@ public record IndexHealthResponse(
         RebuildProgressResponse noticeRebuild,
         RebuildProgressResponse applicationRebuild
 ) {
-    public record IndexState(String name, boolean exists) {
+    public record IndexState(String name, boolean exists, boolean schemaReady, String activeTarget) {
     }
 }

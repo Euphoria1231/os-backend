@@ -59,7 +59,7 @@ public class SearchService {
         highlight.putObject("fields").putObject("title");
         highlight.withObject("fields").putObject("content");
 
-        JsonNode hits = execute(properties.getNoticeIndex(), request).path("hits");
+        JsonNode hits = execute(properties.getNoticeAlias(), request).path("hits");
         List<NoticeSearchResponse> items = new ArrayList<>();
         for (JsonNode hit : hits.path("hits")) {
             NoticeSearchDocument source = treeToValue(hit.path("_source"), NoticeSearchDocument.class);
@@ -88,11 +88,12 @@ public class SearchService {
         addTextQuery(bool, keyword, List.of("reasonSummary"));
         ArrayNode filters = bool.putArray("filter");
         if (departmentManager && !administrator) {
-            ObjectNode ownerScope = objectMapper.createObjectNode().putObject("bool");
-            ownerScope.putArray("should")
+            ObjectNode ownerScope = objectMapper.createObjectNode();
+            ObjectNode ownerScopeBool = ownerScope.putObject("bool");
+            ownerScopeBool.putArray("should")
                     .add(termQuery("applicantId", employeeId))
                     .add(termQuery("approverId", employeeId));
-            ownerScope.put("minimum_should_match", 1);
+            ownerScopeBool.put("minimum_should_match", 1);
             filters.add(ownerScope);
         } else if (!administrator) {
             filters.add(termQuery("applicantId", employeeId));
@@ -111,7 +112,7 @@ public class SearchService {
         highlight.putArray("post_tags").add("</em>");
         highlight.putObject("fields").putObject("reasonSummary");
 
-        JsonNode hits = execute(properties.getApplicationIndex(), request).path("hits");
+        JsonNode hits = execute(properties.getApplicationAlias(), request).path("hits");
         List<ApplicationSearchResponse> items = new ArrayList<>();
         for (JsonNode hit : hits.path("hits")) {
             ApplicationSearchDocument source = treeToValue(

@@ -34,6 +34,8 @@ class ElasticsearchSearchIndexRepositoryTests {
         ElasticsearchSearchProperties properties = new ElasticsearchSearchProperties();
         properties.setNoticeIndex("oa-notices-v1");
         properties.setApplicationIndex("oa-applications-v1");
+        properties.setNoticeAlias("oa-notices-v1");
+        properties.setApplicationAlias("oa-applications-v1");
         repository = new ElasticsearchSearchIndexRepository(
                 new RestElasticsearchGateway(restClient, objectMapper),
                 objectMapper,
@@ -120,6 +122,34 @@ class ElasticsearchSearchIndexRepositoryTests {
         )))
                 .isInstanceOf(java.io.IOException.class)
                 .hasMessageContaining("failed items");
+    }
+
+    @Test
+    void rejectsBulkResponseWithoutBooleanErrorsField() {
+        server.setBulkResponses("{\"items\":[{\"index\":{\"_id\":\"notice-41\",\"status\":201}}]}");
+
+        assertThatThrownBy(() -> repository.saveNotices(List.of(
+                new NoticeSearchDocument(
+                        41L, "放假通知", "国庆节放假安排",
+                        LocalDateTime.of(2026, 7, 22, 9, 0), "PUBLISHED"
+                )
+        )))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("errors");
+    }
+
+    @Test
+    void rejectsBulkResponseWithUnexpectedItemCount() {
+        server.setBulkResponses("{\"errors\":false,\"items\":[]}");
+
+        assertThatThrownBy(() -> repository.saveNotices(List.of(
+                new NoticeSearchDocument(
+                        41L, "放假通知", "国庆节放假安排",
+                        LocalDateTime.of(2026, 7, 22, 9, 0), "PUBLISHED"
+                )
+        )))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("item count");
     }
 
     @Test

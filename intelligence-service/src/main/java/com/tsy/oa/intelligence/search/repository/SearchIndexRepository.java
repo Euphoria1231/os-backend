@@ -22,9 +22,23 @@ public interface SearchIndexRepository {
         }
     }
 
+    default void saveNoticesToIndex(
+            String indexName,
+            List<NoticeSearchDocument> documents
+    ) throws IOException {
+        saveNotices(documents);
+    }
+
     default void saveApplications(List<ApplicationSearchDocument> documents) throws IOException {
         for (ApplicationSearchDocument document : documents) {
             saveApplication(document);
         }
+    }
+
+    default void saveApplicationsToIndex(
+            String indexName,
+            List<ApplicationSearchDocument> documents
+    ) throws IOException {
+        saveApplications(documents);
     }
 }

@@ -11,6 +11,7 @@ import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient
 import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourcePageClient;
 import com.tsy.oa.intelligence.search.event.source.NoticeSearchSourceClient;
 import com.tsy.oa.intelligence.search.event.source.NoticeSearchSourcePageClient;
+import com.tsy.oa.intelligence.search.index.SearchIndexSchema;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
 import com.tsy.oa.intelligence.search.model.NoticeSearchDocument;
 import com.tsy.oa.intelligence.search.repository.ElasticsearchGateway;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,8 +29,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SearchIndexAdministrationService {
 
     private static final int REBUILD_PAGE_SIZE = 100;
-    private static final String DELETE_ALL_DOCUMENTS = "{\"query\":{\"match_all\":{}}}";
-
     private final ElasticsearchGateway gateway;
     private final ElasticsearchSearchProperties properties;
     private final NoticeSearchSourcePageClient noticeSourceClient;
@@ -63,7 +63,8 @@ public class SearchIndexAdministrationService {
         LocalDateTime startedAt = LocalDateTime.now();
         noticeProgress.set(running("NOTICES", startedAt));
         try {
-            gateway.deleteByQuery(properties.getNoticeIndex(), DELETE_ALL_DOCUMENTS);
+            String stagingIndex = stagingIndex(properties.getNoticeAlias());
+            gateway.createIndex(stagingIndex, SearchIndexSchema.NOTICE_DEFINITION);
             int page = 1;
             long processed = 0;
             Long expectedTotal = null;
@@ -78,7 +79,7 @@ public class SearchIndexAdministrationService {
                 List<NoticeSearchDocument> documents = sourcePage.items().stream()
                         .map(this::toNoticeDocument)
                         .toList();
-                searchIndexRepository.saveNotices(documents);
+                searchIndexRepository.saveNoticesToIndex(stagingIndex, documents);
                 processed += documents.size();
                 requireProcessedNotBeyondTotal(processed, expectedTotal, "notice");
                 noticeProgress.set(progress(
@@ -86,7 +87,8 @@ public class SearchIndexAdministrationService {
                 ));
                 if (!sourcePage.hasNext()) {
                     requireComplete(processed, expectedTotal, "notice");
-                    gateway.refreshIndex(properties.getNoticeIndex());
+                    gateway.refreshIndex(stagingIndex);
+                    gateway.switchAlias(properties.getNoticeAlias(), stagingIndex);
                     return complete(noticeProgress, "NOTICES", processed, expectedTotal, page, startedAt);
                 }
                 requireProgress(documents, "notice");
@@ -105,7 +107,8 @@ public class SearchIndexAdministrationService {
         LocalDateTime startedAt = LocalDateTime.now();
         applicationProgress.set(running("APPLICATIONS", startedAt));
         try {
-            gateway.deleteByQuery(properties.getApplicationIndex(), DELETE_ALL_DOCUMENTS);
+            String stagingIndex = stagingIndex(properties.getApplicationAlias());
+            gateway.createIndex(stagingIndex, SearchIndexSchema.APPLICATION_DEFINITION);
             int page = 1;
             long processed = 0;
             Long expectedTotal = null;
@@ -120,7 +123,7 @@ public class SearchIndexAdministrationService {
                 List<ApplicationSearchDocument> documents = sourcePage.items().stream()
                         .map(this::toApplicationDocument)
                         .toList();
-                searchIndexRepository.saveApplications(documents);
+                searchIndexRepository.saveApplicationsToIndex(stagingIndex, documents);
                 processed += documents.size();
                 requireProcessedNotBeyondTotal(processed, expectedTotal, "application");
                 applicationProgress.set(progress(
@@ -128,7 +131,8 @@ public class SearchIndexAdministrationService {
                 ));
                 if (!sourcePage.hasNext()) {
                     requireComplete(processed, expectedTotal, "application");
-                    gateway.refreshIndex(properties.getApplicationIndex());
+                    gateway.refreshIndex(stagingIndex);
+                    gateway.switchAlias(properties.getApplicationAlias(), stagingIndex);
                     return complete(
                             applicationProgress, "APPLICATIONS", processed, expectedTotal, page, startedAt
                     );
@@ -146,20 +150,37 @@ public class SearchIndexAdministrationService {
 
     public IndexHealthResponse health() {
         try {
-            boolean noticeExists = gateway.indexExists(properties.getNoticeIndex());
-            boolean applicationExists = gateway.indexExists(properties.getApplicationIndex());
+            String noticeTarget = gateway.aliasTarget(properties.getNoticeAlias());
+            String applicationTarget = gateway.aliasTarget(properties.getApplicationAlias());
+            boolean noticeExists = noticeTarget != null;
+            boolean applicationExists = applicationTarget != null;
+            boolean noticeSchemaReady = noticeExists && gateway.fieldMappingMatches(
+                    noticeTarget, "status", "keyword"
+            );
+            boolean applicationSchemaReady = applicationExists && gateway.fieldMappingMatches(
+                    applicationTarget, "approverId", "long"
+            );
             return new IndexHealthResponse(
                     true,
-                    new IndexHealthResponse.IndexState(properties.getNoticeIndex(), noticeExists),
-                    new IndexHealthResponse.IndexState(properties.getApplicationIndex(), applicationExists),
+                    new IndexHealthResponse.IndexState(
+                            properties.getNoticeAlias(), noticeExists, noticeSchemaReady, noticeTarget
+                    ),
+                    new IndexHealthResponse.IndexState(
+                            properties.getApplicationAlias(), applicationExists,
+                            applicationSchemaReady, applicationTarget
+                    ),
                     noticeProgress.get(),
                     applicationProgress.get()
             );
         } catch (IOException exception) {
             return new IndexHealthResponse(
                     false,
-                    new IndexHealthResponse.IndexState(properties.getNoticeIndex(), false),
-                    new IndexHealthResponse.IndexState(properties.getApplicationIndex(), false),
+                    new IndexHealthResponse.IndexState(
+                            properties.getNoticeAlias(), false, false, null
+                    ),
+                    new IndexHealthResponse.IndexState(
+                            properties.getApplicationAlias(), false, false, null
+                    ),
                     noticeProgress.get(),
                     applicationProgress.get()
             );
@@ -242,6 +263,10 @@ public class SearchIndexAdministrationService {
         if (!running.compareAndSet(false, true)) {
             throw new BusinessException(CommonErrorCode.BAD_REQUEST);
         }
+    }
+
+    private String stagingIndex(String aliasName) {
+        return aliasName + "-rebuild-" + UUID.randomUUID().toString().replace("-", "");
     }
 
     private RebuildProgressResponse running(String type, LocalDateTime startedAt) {

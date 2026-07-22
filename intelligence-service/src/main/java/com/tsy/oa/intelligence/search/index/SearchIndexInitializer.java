@@ -22,14 +22,6 @@ public class SearchIndexInitializer implements ApplicationRunner {
     private static final String ELASTICSEARCH_VERSION = "7.13.0";
     private static final List<String> REQUIRED_ANALYZERS = List.of("ik_max_word", "ik_smart");
 
-    private static final String NOTICE_INDEX_DEFINITION = """
-            {"settings":{"number_of_shards":1,"number_of_replicas":0},"mappings":{"dynamic":"strict","properties":{"noticeId":{"type":"long"},"title":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},"content":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},"publishedAt":{"type":"date"},"status":{"type":"keyword"}}}}
-            """;
-
-    private static final String APPLICATION_INDEX_DEFINITION = """
-            {"settings":{"number_of_shards":1,"number_of_replicas":0},"mappings":{"dynamic":"strict","properties":{"applicationId":{"type":"long"},"applicantId":{"type":"long"},"approverId":{"type":"long"},"type":{"type":"keyword"},"status":{"type":"keyword"},"reasonSummary":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},"submittedAt":{"type":"date"},"updatedAt":{"type":"date"}}}}
-            """;
-
     private final ElasticsearchGateway gateway;
     private final ElasticsearchSearchProperties properties;
 
@@ -49,8 +41,11 @@ public class SearchIndexInitializer implements ApplicationRunner {
     public void initialize() {
         try {
             verifyRequiredAnalyzers();
-            createIndexIfMissing(properties.getNoticeIndex(), NOTICE_INDEX_DEFINITION);
-            createIndexIfMissing(properties.getApplicationIndex(), APPLICATION_INDEX_DEFINITION);
+            createIndexIfMissing(properties.getNoticeIndex(), SearchIndexSchema.NOTICE_DEFINITION);
+            createIndexIfMissing(properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_DEFINITION);
+            migrateApplicationMapping();
+            attachAliasIfMissing(properties.getNoticeAlias(), properties.getNoticeIndex());
+            attachAliasIfMissing(properties.getApplicationAlias(), properties.getApplicationIndex());
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize Elasticsearch search indexes", exception);
         }
@@ -70,6 +65,27 @@ public class SearchIndexInitializer implements ApplicationRunner {
     private void createIndexIfMissing(String indexName, String definition) throws IOException {
         if (!gateway.indexExists(indexName)) {
             gateway.createIndex(indexName, definition);
+        }
+    }
+
+    private void migrateApplicationMapping() throws IOException {
+        if (!gateway.fieldMappingMatches(
+                properties.getApplicationIndex(), "approverId", "long"
+        )) {
+            gateway.updateMapping(
+                    properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_APPROVER_MAPPING
+            );
+        }
+        if (!gateway.fieldMappingMatches(
+                properties.getApplicationIndex(), "approverId", "long"
+        )) {
+            throw new IllegalStateException("Application search index mapping is not ready");
+        }
+    }
+
+    private void attachAliasIfMissing(String aliasName, String initialIndex) throws IOException {
+        if (gateway.aliasTarget(aliasName) == null) {
+            gateway.switchAlias(aliasName, initialIndex);
         }
     }
 }
