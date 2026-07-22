@@ -29,3 +29,13 @@ CREATE TABLE IF NOT EXISTS search_index_event_sequence (
     event_id VARCHAR(64) NOT NULL UNIQUE,
     created_at TIMESTAMP(3) NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_analysis_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    request_type VARCHAR(64) NOT NULL,
+    business_reference_id VARCHAR(128) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    duration_ms BIGINT NOT NULL,
+    result_summary VARCHAR(500) NOT NULL,
+    audited_at TIMESTAMP(3) NOT NULL
+);

@@ -42,3 +42,17 @@ CREATE TABLE IF NOT EXISTS search_index_event_sequence (
     UNIQUE KEY uk_search_event_sequence_event (event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='搜索索引事件全局顺序';
+
+CREATE TABLE IF NOT EXISTS ai_analysis_record (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '审计记录ID',
+    request_type VARCHAR(64) NOT NULL COMMENT '请求类型',
+    business_reference_id VARCHAR(128) NOT NULL COMMENT '业务关联ID',
+    status VARCHAR(16) NOT NULL COMMENT 'SUCCESS、DEGRADED或FAILED',
+    duration_ms BIGINT NOT NULL COMMENT 'AI调用耗时毫秒',
+    result_summary VARCHAR(500) NOT NULL COMMENT '必要结果摘要，不保存完整请求',
+    audited_at DATETIME(3) NOT NULL COMMENT '审计时间',
+    PRIMARY KEY (id),
+    KEY idx_ai_analysis_business (request_type, business_reference_id),
+    KEY idx_ai_analysis_audited_at (audited_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='AI辅助分析调用审计记录';

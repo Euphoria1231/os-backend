@@ -36,6 +36,11 @@ mybatis:
     map-underscore-to-camel-case: true
 
 oa:
+  ai:
+    endpoint: ${DASHSCOPE_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    model: ${DASHSCOPE_MODEL:qwen-plus}
+    api-key: ${DASHSCOPE_API_KEY:}
+    timeout: ${DASHSCOPE_TIMEOUT:10s}
   search:
     elasticsearch:
       url: ${ELASTICSEARCH_URL:http://127.0.0.1:9200}
