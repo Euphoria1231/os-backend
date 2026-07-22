@@ -82,6 +82,13 @@
         ORDER BY applicant_id, start_time, id
     </select>
 
+    <select id="findSearchSource" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application
+        ORDER BY updated_at, id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <update id="updateApplicationStatusIfPending">
         UPDATE flow_application
         SET status = #{status}, updated_at = CURRENT_TIMESTAMP

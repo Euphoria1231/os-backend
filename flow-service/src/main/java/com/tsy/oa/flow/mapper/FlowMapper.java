@@ -28,6 +28,8 @@ public interface FlowMapper {
             @Param("nextDayStart") LocalDateTime nextDayStart
     );
 
+    List<FlowApplication> findSearchSource(@Param("offset") int offset, @Param("limit") int limit);
+
     int updateApplicationStatusIfPending(@Param("id") Long id, @Param("status") String status);
 
     int updateProcessInstanceId(@Param("id") Long id, @Param("processInstanceId") String processInstanceId);

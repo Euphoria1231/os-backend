@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.event.ApprovalCompletedEvent;
 import com.tsy.oa.flow.event.ApprovalEventPublisher;
+import com.tsy.oa.flow.event.SearchIndexEvent;
+import com.tsy.oa.flow.event.SearchIndexEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,11 +57,15 @@ class FlowControllerTests {
     @Autowired
     private TestApprovalEventPublisher approvalEventPublisher;
 
+    @Autowired
+    private TestSearchIndexEventPublisher searchIndexEventPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
         jdbcTemplate.update("DELETE FROM flow_application");
         approvalEventPublisher.clear();
+        searchIndexEventPublisher.clear();
         employeeDirectory.clear();
         employeeDirectory.setLeader(10L, 20L);
         employeeDirectory.setLeader(20L, 30L);
@@ -121,6 +127,7 @@ class FlowControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
         assertThat(approvalEventPublisher.events()).isEmpty();
+        assertThat(searchIndexEventPublisher.events()).isEmpty();
 
         mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
                         .header(EMPLOYEE_HEADER, "30")
@@ -138,6 +145,14 @@ class FlowControllerTests {
         assertThat(event.result()).isEqualTo("APPROVED");
         assertThat(event.completedAt()).isNotNull();
         assertThat(event.traceId()).isNotBlank();
+
+        assertThat(searchIndexEventPublisher.events()).hasSize(1);
+        SearchIndexEvent searchIndexEvent = searchIndexEventPublisher.events().getFirst();
+        assertThat(searchIndexEvent.eventId())
+                .isEqualTo("search-index:flow-application:" + applicationId + ":APPROVED");
+        assertThat(searchIndexEvent.resourceType()).isEqualTo("FLOW_APPLICATION");
+        assertThat(searchIndexEvent.resourceId()).isEqualTo(applicationId);
+        assertThat(searchIndexEvent.operation()).isEqualTo("APPROVED");
     }
 
     @Test
@@ -158,6 +173,12 @@ class FlowControllerTests {
         assertThat(event.applicationType()).isEqualTo("OVERTIME");
         assertThat(event.applicantId()).isEqualTo(10L);
         assertThat(event.result()).isEqualTo("REJECTED");
+
+        assertThat(searchIndexEventPublisher.events()).hasSize(1);
+        SearchIndexEvent searchIndexEvent = searchIndexEventPublisher.events().getFirst();
+        assertThat(searchIndexEvent.eventId())
+                .isEqualTo("search-index:flow-application:" + applicationId + ":REJECTED");
+        assertThat(searchIndexEvent.operation()).isEqualTo("REJECTED");
     }
 
     @Test
@@ -311,6 +332,25 @@ class FlowControllerTests {
     }
 
     @Test
+    void listsFlowSearchSourceWithLimitedPageSize() throws Exception {
+        for (int index = 1; index <= 101; index++) {
+            insertApplication("SEARCH-" + index, 10L + index, "LEAVE",
+                    LocalDateTime.of(2026, 7, 21, 9, 0),
+                    LocalDateTime.of(2026, 7, 21, 18, 0),
+                    "APPROVED");
+        }
+
+        mockMvc.perform(get("/internal/flow/search-source")
+                        .param("page", "1")
+                        .param("pageSize", "200"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(100))
+                .andExpect(jsonPath("$.data[0].applicationNo").value("SEARCH-1"))
+                .andExpect(jsonPath("$.data[0].reason").value("internal query fixture"))
+                .andExpect(jsonPath("$.data[0].processInstanceId").doesNotExist());
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
@@ -320,7 +360,8 @@ class FlowControllerTests {
                 .andExpect(jsonPath("$.openapi").isNotEmpty())
                 .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
                 .andExpect(jsonPath("$.paths['/api/flow/applications/leave']").exists())
-                .andExpect(jsonPath("$.paths['/internal/flow/approved-leaves']").exists());
+                .andExpect(jsonPath("$.paths['/internal/flow/approved-leaves']").exists())
+                .andExpect(jsonPath("$.paths['/internal/flow/search-source']").exists());
     }
 
     private long submit(String path, Long applicantId, String reason) throws Exception {
@@ -398,6 +439,12 @@ class FlowControllerTests {
         TestApprovalEventPublisher testApprovalEventPublisher() {
             return new TestApprovalEventPublisher();
         }
+
+        @Bean
+        @Primary
+        TestSearchIndexEventPublisher testSearchIndexEventPublisher() {
+            return new TestSearchIndexEventPublisher();
+        }
     }
 
     static class TestApprovalEventPublisher implements ApprovalEventPublisher {
@@ -410,6 +457,24 @@ class FlowControllerTests {
         }
 
         List<ApprovalCompletedEvent> events() {
+            return List.copyOf(events);
+        }
+
+        void clear() {
+            events.clear();
+        }
+    }
+
+    static class TestSearchIndexEventPublisher implements SearchIndexEventPublisher {
+
+        private final List<SearchIndexEvent> events = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void publish(SearchIndexEvent event) {
+            events.add(event);
+        }
+
+        List<SearchIndexEvent> events() {
             return List.copyOf(events);
         }
 

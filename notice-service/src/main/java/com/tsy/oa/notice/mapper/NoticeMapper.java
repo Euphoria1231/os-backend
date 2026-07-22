@@ -27,4 +27,6 @@ public interface NoticeMapper {
     );
 
     int countUnread(Long employeeId);
+
+    List<Notice> findSearchSource(@Param("offset") int offset, @Param("limit") int limit);
 }

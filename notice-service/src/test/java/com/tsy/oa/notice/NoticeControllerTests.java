@@ -2,6 +2,8 @@ package com.tsy.oa.notice;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tsy.oa.notice.event.SearchIndexEvent;
+import com.tsy.oa.notice.event.SearchIndexEventPublisher;
 import com.tsy.oa.notice.message.event.ApprovalCompletedEvent;
 import com.tsy.oa.notice.message.event.ApprovalCompletedEventConsumer;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,13 +13,20 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -27,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = NoticeControllerTests.TestApplication.class)
 @AutoConfigureMockMvc
+@Import(NoticeControllerTests.NoticeTestConfiguration.class)
 class NoticeControllerTests {
 
     private static final String EMPLOYEE_HEADER = "X-Employee-Id";
@@ -43,17 +53,27 @@ class NoticeControllerTests {
     @Autowired
     private ApprovalCompletedEventConsumer approvalCompletedEventConsumer;
 
+    @Autowired
+    private TestSearchIndexEventPublisher searchIndexEventPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM message");
         jdbcTemplate.update("DELETE FROM message_consume_record");
         jdbcTemplate.update("DELETE FROM notice_read");
         jdbcTemplate.update("DELETE FROM notice");
+        searchIndexEventPublisher.clear();
     }
 
     @Test
     void publishesNoticeAndTracksEmployeeReadStatus() throws Exception {
         long noticeId = publishNotice();
+        assertThat(searchIndexEventPublisher.events()).hasSize(1);
+        SearchIndexEvent event = searchIndexEventPublisher.events().getFirst();
+        assertThat(event.eventId()).isEqualTo("search-index:notice:" + noticeId + ":PUBLISHED");
+        assertThat(event.resourceType()).isEqualTo("NOTICE");
+        assertThat(event.resourceId()).isEqualTo(noticeId);
+        assertThat(event.operation()).isEqualTo("PUBLISHED");
 
         mockMvc.perform(get("/api/notices").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
@@ -182,6 +202,21 @@ class NoticeControllerTests {
     }
 
     @Test
+    void listsNoticeSearchSourceWithLimitedPageSize() throws Exception {
+        for (int index = 1; index <= 101; index++) {
+            insertNotice("SEARCH-" + index);
+        }
+
+        mockMvc.perform(get("/internal/notices/search-source")
+                        .param("page", "1")
+                        .param("pageSize", "200"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(100))
+                .andExpect(jsonPath("$.data[0].title").value("SEARCH-1"))
+                .andExpect(jsonPath("$.data[0].read").doesNotExist());
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
@@ -191,7 +226,8 @@ class NoticeControllerTests {
                 .andExpect(jsonPath("$.openapi").isNotEmpty())
                 .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
                 .andExpect(jsonPath("$.paths['/api/notices']").exists())
-                .andExpect(jsonPath("$.paths['/api/notices/messages']").exists());
+                .andExpect(jsonPath("$.paths['/api/notices/messages']").exists())
+                .andExpect(jsonPath("$.paths['/internal/notices/search-source']").exists());
     }
 
     private long publishNotice() throws Exception {
@@ -210,6 +246,18 @@ class NoticeControllerTests {
                 .getContentAsString();
         JsonNode body = objectMapper.readTree(response);
         return body.path("data").path("id").asLong();
+    }
+
+    private void insertNotice(String title) {
+        jdbcTemplate.update("""
+                INSERT INTO notice (title, content, publisher_id, status, published_at)
+                VALUES (?, ?, ?, 'PUBLISHED', ?)
+                """,
+                title,
+                "用于检索重建的数据源正文",
+                1L,
+                LocalDateTime.of(2026, 7, 22, 9, 0)
+        );
     }
 
     private ApprovalCompletedEvent approvalEvent(
@@ -236,5 +284,33 @@ class NoticeControllerTests {
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.notice")
     static class TestApplication {
+    }
+
+    @TestConfiguration
+    static class NoticeTestConfiguration {
+
+        @Bean
+        @Primary
+        TestSearchIndexEventPublisher testSearchIndexEventPublisher() {
+            return new TestSearchIndexEventPublisher();
+        }
+    }
+
+    static class TestSearchIndexEventPublisher implements SearchIndexEventPublisher {
+
+        private final List<SearchIndexEvent> events = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void publish(SearchIndexEvent event) {
+            events.add(event);
+        }
+
+        List<SearchIndexEvent> events() {
+            return List.copyOf(events);
+        }
+
+        void clear() {
+            events.clear();
+        }
     }
 }

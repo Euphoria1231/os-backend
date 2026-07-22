@@ -2,6 +2,7 @@ package com.tsy.oa.flow.controller;
 
 import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.flow.dto.ApprovedLeaveResponse;
+import com.tsy.oa.flow.dto.FlowSearchSourceResponse;
 import com.tsy.oa.flow.service.FlowService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,5 +28,13 @@ public class InternalFlowController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
         return ApiResponse.success(flowService.listApprovedLeaves(date));
+    }
+
+    @GetMapping("/search-source")
+    public ApiResponse<List<FlowSearchSourceResponse>> searchSource(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        return ApiResponse.success(flowService.listSearchSource(page, pageSize));
     }
 }
