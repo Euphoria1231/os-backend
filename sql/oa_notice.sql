@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS notice (
     published_at DATETIME NOT NULL COMMENT '发布时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    KEY idx_notice_status_published (status, published_at)
+    KEY idx_notice_status_published (status, published_at),
+    KEY idx_notice_updated_id (updated_at, id)
 ) ENGINE=InnoDB COMMENT='公司公告表';
 
 CREATE TABLE IF NOT EXISTS message_consume_record (

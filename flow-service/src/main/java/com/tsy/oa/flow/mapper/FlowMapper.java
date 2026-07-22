@@ -5,6 +5,7 @@ import com.tsy.oa.flow.model.FlowApplication;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -21,6 +22,13 @@ public interface FlowMapper {
     List<FlowApplication> findPendingApplicationsByProcessInstanceIds(
             @Param("processInstanceIds") List<String> processInstanceIds
     );
+
+    List<FlowApplication> findApprovedLeavesCoveringDate(
+            @Param("dayStart") LocalDateTime dayStart,
+            @Param("nextDayStart") LocalDateTime nextDayStart
+    );
+
+    List<FlowApplication> findSearchSource(@Param("offset") int offset, @Param("limit") int limit);
 
     int updateApplicationStatusIfPending(@Param("id") Long id, @Param("status") String status);
 

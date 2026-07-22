@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS flow_application (
     UNIQUE KEY uk_flow_application_no (application_no),
     UNIQUE KEY uk_flow_process_instance (process_instance_id),
     KEY idx_flow_applicant_created (applicant_id, created_at),
-    KEY idx_flow_approver_status (approver_id, status)
+    KEY idx_flow_approver_status (approver_id, status),
+    KEY idx_flow_leave_status_time (application_type, status, start_time, end_time),
+    KEY idx_flow_updated_id (updated_at, id)
 ) ENGINE=InnoDB COMMENT='请假与加班申请表';
 
 CREATE TABLE IF NOT EXISTS approval_record (

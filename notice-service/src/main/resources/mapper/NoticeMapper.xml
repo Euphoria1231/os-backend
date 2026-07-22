@@ -73,4 +73,11 @@
               WHERE nr.notice_id = n.id AND nr.employee_id = #{employeeId}
           )
     </select>
+
+    <select id="findSearchSource" resultMap="NoticeResultMap">
+        SELECT <include refid="NoticeColumns"/>
+        FROM notice n
+        ORDER BY n.updated_at, n.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
 </mapper>

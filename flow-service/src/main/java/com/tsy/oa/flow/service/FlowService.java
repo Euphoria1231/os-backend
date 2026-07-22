@@ -3,13 +3,17 @@ package com.tsy.oa.flow.service;
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.flow.dto.ApplicationRequest;
+import com.tsy.oa.flow.dto.ApprovedLeaveResponse;
 import com.tsy.oa.flow.dto.ApprovalRequest;
 import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
+import com.tsy.oa.flow.dto.FlowSearchSourceResponse;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
 import com.tsy.oa.flow.event.ApprovalCompletedEvent;
 import com.tsy.oa.flow.event.ApprovalEventPublisher;
+import com.tsy.oa.flow.event.SearchIndexEvent;
+import com.tsy.oa.flow.event.SearchIndexEventPublisher;
 import com.tsy.oa.flow.mapper.FlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
 import org.flowable.engine.RuntimeService;
@@ -46,25 +50,29 @@ public class FlowService {
     private static final String REJECT = "REJECT";
     private static final String LEAVE_APPROVAL_KEY = "leave-approval";
     private static final String OVERTIME_APPROVAL_KEY = "overtime-approval";
+    private static final int MAX_SEARCH_PAGE_SIZE = 100;
 
     private final FlowMapper flowMapper;
     private final EmployeeDirectory employeeDirectory;
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final ApprovalEventPublisher approvalEventPublisher;
+    private final SearchIndexEventPublisher searchIndexEventPublisher;
 
     public FlowService(
             FlowMapper flowMapper,
             EmployeeDirectory employeeDirectory,
             RuntimeService runtimeService,
             TaskService taskService,
-            ApprovalEventPublisher approvalEventPublisher
+            ApprovalEventPublisher approvalEventPublisher,
+            SearchIndexEventPublisher searchIndexEventPublisher
     ) {
         this.flowMapper = flowMapper;
         this.employeeDirectory = employeeDirectory;
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.approvalEventPublisher = approvalEventPublisher;
+        this.searchIndexEventPublisher = searchIndexEventPublisher;
     }
 
     @Transactional
@@ -114,6 +122,24 @@ public class FlowService {
     public List<ApprovalTaskResponse> listDone(Long approverId) {
         return flowMapper.findCompletedTasksByApprover(approverId).stream()
                 .map(ApprovalTaskResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovedLeaveResponse> listApprovedLeaves(LocalDate date) {
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime nextDayStart = date.plusDays(1).atStartOfDay();
+        return flowMapper.findApprovedLeavesCoveringDate(dayStart, nextDayStart).stream()
+                .map(ApprovedLeaveResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FlowSearchSourceResponse> listSearchSource(int page, int pageSize) {
+        int normalizedPageSize = normalizeSearchPageSize(pageSize);
+        int offset = calculateOffset(page, normalizedPageSize);
+        return flowMapper.findSearchSource(offset, normalizedPageSize).stream()
+                .map(FlowSearchSourceResponse::from)
                 .toList();
     }
 
@@ -214,9 +240,11 @@ public class FlowService {
         if (!approved) {
             updateStatus(applicationId, REJECTED);
             publishApprovalCompletedEventAfterCommit(application, REJECTED);
+            publishSearchIndexEventAfterCommit(application, REJECTED);
         } else if (isProcessEnded(application.getProcessInstanceId())) {
             updateStatus(applicationId, APPROVED);
             publishApprovalCompletedEventAfterCommit(application, APPROVED);
+            publishSearchIndexEventAfterCommit(application, APPROVED);
         } else {
             flowMapper.updateCurrentApproverIfPending(
                     applicationId,
@@ -253,6 +281,35 @@ public class FlowService {
             approvalEventPublisher.publish(event);
         } catch (RuntimeException ex) {
             log.error("Failed to publish approval completed event, eventId={}", event.eventId(), ex);
+        }
+    }
+
+    private void publishSearchIndexEventAfterCommit(FlowApplication application, String operation) {
+        SearchIndexEvent event = new SearchIndexEvent(
+                "search-index:flow-application:" + application.getId() + ":" + operation,
+                "FLOW_APPLICATION",
+                application.getId(),
+                operation,
+                LocalDateTime.now(),
+                UUID.randomUUID().toString()
+        );
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishSearchIndexEvent(event);
+                }
+            });
+            return;
+        }
+        publishSearchIndexEvent(event);
+    }
+
+    private void publishSearchIndexEvent(SearchIndexEvent event) {
+        try {
+            searchIndexEventPublisher.publish(event);
+        } catch (RuntimeException ex) {
+            log.error("Failed to publish flow search index event, eventId={}", event.eventId(), ex);
         }
     }
 
@@ -305,5 +362,19 @@ public class FlowService {
             case OVERTIME -> OVERTIME_APPROVAL_KEY;
             default -> throw new BusinessException(CommonErrorCode.BAD_REQUEST);
         };
+    }
+
+    private int normalizeSearchPageSize(int pageSize) {
+        if (pageSize < 1) {
+            throw new BusinessException(CommonErrorCode.BAD_REQUEST);
+        }
+        return Math.min(pageSize, MAX_SEARCH_PAGE_SIZE);
+    }
+
+    private int calculateOffset(int page, int pageSize) {
+        if (page < 1) {
+            throw new BusinessException(CommonErrorCode.BAD_REQUEST);
+        }
+        return (page - 1) * pageSize;
     }
 }
