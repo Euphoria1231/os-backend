@@ -61,6 +61,17 @@
         ORDER BY created_at, id
     </select>
 
+    <select id="findPendingApplicationsByProcessInstanceIds" resultMap="FlowApplicationResultMap">
+        SELECT <include refid="ApplicationColumns"/>
+        FROM flow_application
+        WHERE status = 'PENDING'
+          AND process_instance_id IN
+          <foreach collection="processInstanceIds" item="processInstanceId" open="(" separator="," close=")">
+              #{processInstanceId}
+          </foreach>
+        ORDER BY created_at, id
+    </select>
+
     <update id="updateApplicationStatusIfPending">
         UPDATE flow_application
         SET status = #{status}, updated_at = CURRENT_TIMESTAMP

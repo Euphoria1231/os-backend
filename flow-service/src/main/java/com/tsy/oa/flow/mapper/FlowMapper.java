@@ -18,6 +18,10 @@ public interface FlowMapper {
 
     List<FlowApplication> findPendingApplicationsByApprover(Long approverId);
 
+    List<FlowApplication> findPendingApplicationsByProcessInstanceIds(
+            @Param("processInstanceIds") List<String> processInstanceIds
+    );
+
     int updateApplicationStatusIfPending(@Param("id") Long id, @Param("status") String status);
 
     int updateProcessInstanceId(@Param("id") Long id, @Param("processInstanceId") String processInstanceId);

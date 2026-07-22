@@ -3,6 +3,8 @@ package com.tsy.oa.flow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
+import com.tsy.oa.flow.event.ApprovalCompletedEvent;
+import com.tsy.oa.flow.event.ApprovalEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,9 +22,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -47,10 +52,14 @@ class FlowControllerTests {
     @Autowired
     private InMemoryEmployeeDirectory employeeDirectory;
 
+    @Autowired
+    private TestApprovalEventPublisher approvalEventPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
         jdbcTemplate.update("DELETE FROM flow_application");
+        approvalEventPublisher.clear();
         employeeDirectory.clear();
         employeeDirectory.setLeader(10L, 20L);
         employeeDirectory.setLeader(20L, 30L);
@@ -99,6 +108,103 @@ class FlowControllerTests {
         mockMvc.perform(get("/api/flow/applications/mine").header(EMPLOYEE_HEADER, "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("APPROVED"));
+    }
+
+    @Test
+    void publishesApprovalCompletedEventOnlyWhenLeaveProcessEnds() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "family errand");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"first approval\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        assertThat(approvalEventPublisher.events()).isEmpty();
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"final approval\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        assertThat(approvalEventPublisher.events()).hasSize(1);
+        ApprovalCompletedEvent event = approvalEventPublisher.events().getFirst();
+        assertThat(event.eventId()).isEqualTo("approval-completed:" + applicationId + ":APPROVED");
+        assertThat(event.applicationId()).isEqualTo(applicationId);
+        assertThat(event.applicationType()).isEqualTo("LEAVE");
+        assertThat(event.applicantId()).isEqualTo(10L);
+        assertThat(event.result()).isEqualTo("APPROVED");
+        assertThat(event.completedAt()).isNotNull();
+        assertThat(event.traceId()).isNotBlank();
+    }
+
+    @Test
+    void publishesApprovalCompletedEventWhenApplicationRejected() throws Exception {
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "release support");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/reject", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"not approved\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        assertThat(approvalEventPublisher.events()).hasSize(1);
+        ApprovalCompletedEvent event = approvalEventPublisher.events().getFirst();
+        assertThat(event.eventId()).isEqualTo("approval-completed:" + applicationId + ":REJECTED");
+        assertThat(event.applicationId()).isEqualTo(applicationId);
+        assertThat(event.applicationType()).isEqualTo("OVERTIME");
+        assertThat(event.applicantId()).isEqualTo(10L);
+        assertThat(event.result()).isEqualTo("REJECTED");
+    }
+
+    @Test
+    void listsTodoByFlowableCurrentTaskForCurrentUser() throws Exception {
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "release support");
+        jdbcTemplate.update("UPDATE flow_application SET approver_id = ? WHERE id = ?", 30L, applicationId);
+
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(applicationId))
+                .andExpect(jsonPath("$.data[0].applicationType").value("OVERTIME"))
+                .andExpect(jsonPath("$.data[0].processInstanceId").doesNotExist());
+
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void preventsCompletedTaskFromBeingProcessedAgainAndKeepsDoneIsolated() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "family errand");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"approved\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.approverId").value(30));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"repeat approval\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40301));
+
+        mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].applicationId").value(applicationId))
+                .andExpect(jsonPath("$.data[0].action").value("APPROVE"));
+
+        mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test
@@ -224,6 +330,30 @@ class FlowControllerTests {
         @Primary
         InMemoryEmployeeDirectory inMemoryEmployeeDirectory() {
             return new InMemoryEmployeeDirectory();
+        }
+
+        @Bean
+        @Primary
+        TestApprovalEventPublisher testApprovalEventPublisher() {
+            return new TestApprovalEventPublisher();
+        }
+    }
+
+    static class TestApprovalEventPublisher implements ApprovalEventPublisher {
+
+        private final List<ApprovalCompletedEvent> events = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void publish(ApprovalCompletedEvent event) {
+            events.add(event);
+        }
+
+        List<ApprovalCompletedEvent> events() {
+            return List.copyOf(events);
+        }
+
+        void clear() {
+            events.clear();
         }
     }
 
