@@ -124,7 +124,8 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.paths['/api/attendance/clock-in']").exists())
                 .andExpect(jsonPath("$.paths['/api/attendance/calculations/daily'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/attendance/statistics/monthly'].get").exists())
-                .andExpect(jsonPath("$.paths['/api/attendance/statistics/departments'].get").exists());
+                .andExpect(jsonPath("$.paths['/api/attendance/statistics/departments'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/attendance/reports/monthly/export'].get").exists());
     }
 
     @SpringBootConfiguration

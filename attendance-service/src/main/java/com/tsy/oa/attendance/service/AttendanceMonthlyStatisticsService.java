@@ -83,13 +83,22 @@ public class AttendanceMonthlyStatisticsService {
             YearMonth month,
             Long departmentId
     ) {
-        requireDepartmentAccess(operatorEmployeeId, departmentId);
-        List<AttendanceMonthlyStatisticsResponse> employeeSummaries = workforceProvider
-                .findActiveEmployeeIdsByDepartment(departmentId)
+        List<AttendanceMonthlyStatisticsResponse> employeeSummaries = findAuthorizedDepartmentEmployeeIds(
+                operatorEmployeeId,
+                departmentId
+        )
                 .stream()
                 .map(employeeId -> calculateMonthly(employeeId, month))
                 .toList();
         return aggregateDepartment(departmentId, month, employeeSummaries);
+    }
+
+    public List<Long> findAuthorizedDepartmentEmployeeIds(
+            Long operatorEmployeeId,
+            Long departmentId
+    ) {
+        requireDepartmentAccess(operatorEmployeeId, departmentId);
+        return workforceProvider.findActiveEmployeeIdsByDepartment(departmentId);
     }
 
     private AttendanceMonthlySummary summarize(
