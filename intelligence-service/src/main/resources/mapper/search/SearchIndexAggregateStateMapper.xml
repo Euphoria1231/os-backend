@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.intelligence.search.event.persistence.SearchIndexAggregateStateMapper">
+
+    <resultMap id="AggregateStateResultMap"
+               type="com.tsy.oa.intelligence.search.event.persistence.SearchIndexAggregateState">
+        <id property="aggregateType" column="aggregate_type"/>
+        <id property="aggregateId" column="aggregate_id"/>
+        <result property="lastEventVersion" column="last_event_version"/>
+        <result property="lastEventId" column="last_event_id"/>
+        <result property="lastOperation" column="last_operation"/>
+    </resultMap>
+
+    <select id="findForUpdate" resultMap="AggregateStateResultMap">
+        SELECT aggregate_type,
+               aggregate_id,
+               last_event_version,
+               last_event_id,
+               last_operation
+        FROM search_index_aggregate_state
+        WHERE aggregate_type = #{aggregateType}
+          AND aggregate_id = #{aggregateId}
+        FOR UPDATE
+    </select>
+
+    <insert id="initializeIfAbsent">
+        INSERT IGNORE INTO search_index_aggregate_state (
+            aggregate_type,
+            aggregate_id,
+            last_event_version,
+            last_event_id,
+            last_operation,
+            updated_at
+        ) VALUES (
+            #{aggregateType},
+            #{aggregateId},
+            0,
+            '',
+            'INIT',
+            #{updatedAt}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE search_index_aggregate_state
+        SET last_event_version = #{lastEventVersion},
+            last_event_id = #{lastEventId},
+            last_operation = #{lastOperation},
+            updated_at = #{updatedAt}
+        WHERE aggregate_type = #{aggregateType}
+          AND aggregate_id = #{aggregateId}
+    </update>
+
+</mapper>

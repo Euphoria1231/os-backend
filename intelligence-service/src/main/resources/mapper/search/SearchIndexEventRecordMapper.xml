@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.intelligence.search.event.persistence.SearchIndexEventRecordMapper">
+
+    <insert id="claim">
+        INSERT IGNORE INTO search_index_event_record (
+            event_id,
+            aggregate_type,
+            aggregate_id,
+            event_version,
+            operation,
+            processing_status
+        ) VALUES (
+            #{eventId},
+            #{aggregateType},
+            #{aggregateId},
+            #{eventVersion},
+            #{operation},
+            'PROCESSING'
+        )
+    </insert>
+
+    <update id="markCompleted">
+        UPDATE search_index_event_record
+        SET processing_status = #{processingStatus},
+            processed_at = #{processedAt}
+        WHERE event_id = #{eventId}
+    </update>
+
+</mapper>

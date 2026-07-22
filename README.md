@@ -111,6 +111,18 @@ OA_DB_PASSWORD=本地MySQL密码
 与服务端同版本的 `analysis-ik 7.13.0`。智能服务启动时会主动检查两个分析器；插件缺失时会明确报告
 需要安装的插件和版本，不会静默改用普通分词器。
 
+搜索索引通过 RocketMQ 主题 `oa-search-index-events` 异步同步，默认消费组为
+`intelligence-search-index-consumer`。事件包含 `eventId`、`aggregateType`、`operation`、
+`aggregateId`、`version` 和可选的 `document`。`eventId` 用于防止重复消费，`version` 必须在同一业务聚合内
+单调递增；低于或等于已处理版本的迟到事件会记录为 `IGNORED_OUTDATED`，不会覆盖新数据或误删索引。
+首次事件会先创建 version 0 的聚合状态占位行，再通过行锁串行处理同一聚合的并发事件。
+
+UPSERT 事件可以携带完整搜索文档；文档缺失时，智能服务通过来源服务的只读 `search-source` 接口查询，
+禁止直接访问 `oa_notice` 或 `oa_flow`。消费结果和聚合版本记录在 `oa_ai`，索引操作失败会回滚事件占用并
+抛出异常，由 RocketMQ 重投。即使 Elasticsearch 写入成功后数据库提交失败，确定性文档 ID 也能保证重投幂等。
+来源服务需要分别提供 `/internal/notices/search-source/{noticeId}` 和
+`/internal/flow/search-source/{applicationId}`，当前提交固定消费端契约，不跨模块实现来源接口。
+
 ## OpenAPI、Swagger UI 与 Apifox
 
 五个数据与业务服务通过 Springdoc 生成 OpenAPI 3 文档，Gateway 提供统一访问入口：

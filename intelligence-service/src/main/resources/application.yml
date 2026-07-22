@@ -27,6 +27,9 @@ spring:
         password: ${NACOS_PASSWORD:}
         namespace: ${NACOS_NAMESPACE:}
 
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+
 mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
@@ -39,6 +42,10 @@ oa:
       notice-index: ${ELASTICSEARCH_NOTICE_INDEX:oa-notices-v1}
       application-index: ${ELASTICSEARCH_APPLICATION_INDEX:oa-applications-v1}
       initialize: ${ELASTICSEARCH_INITIALIZE:true}
+    events:
+      enabled: ${SEARCH_INDEX_EVENTS_ENABLED:true}
+      topic: ${SEARCH_INDEX_EVENTS_TOPIC:oa-search-index-events}
+      consumer-group: ${SEARCH_INDEX_EVENTS_CONSUMER_GROUP:intelligence-search-index-consumer}
 
 management:
   endpoints:
