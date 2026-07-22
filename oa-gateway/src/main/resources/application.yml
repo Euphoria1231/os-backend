@@ -65,6 +65,12 @@ spring:
                 - Path=/openapi/notice
               filters:
                 - SetPath=/v3/api-docs
+            - id: intelligence-openapi
+              uri: lb://intelligence-service
+              predicates:
+                - Path=/openapi/intelligence
+              filters:
+                - SetPath=/v3/api-docs
             - id: user-service
               uri: lb://user-service
               predicates:
@@ -81,6 +87,10 @@ spring:
               uri: lb://notice-service
               predicates:
                 - Path=/api/notices/**
+            - id: intelligence-service
+              uri: lb://intelligence-service
+              predicates:
+                - Path=/api/intelligence/**
 
 management:
   endpoints:
@@ -106,3 +116,5 @@ springdoc:
         url: /openapi/flow
       - name: 公告服务
         url: /openapi/notice
+      - name: 搜索与智能平台服务
+        url: /openapi/intelligence

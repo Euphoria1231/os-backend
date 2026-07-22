@@ -14,6 +14,7 @@ Nacos，数据访问使用 MyBatis，登录状态使用 JWT 和 Redis。
 | `attendance-service` | 9002 | 上下班打卡、个人记录、Redis 防重复与分布式锁 |
 | `flow-service` | 9003 | 请假、加班、直属领导一级审批和待办/已办 |
 | `notice-service` | 9004 | 公告发布、公告查询和已读/未读状态 |
+| `intelligence-service` | 9005 | 全文检索、AI 分析和数据大屏聚合能力 |
 
 根工程使用 `pom` packaging，只负责依赖和模块管理。IDEA 创建时保留的根目录启动类不是微服务启动入口。
 
@@ -41,9 +42,10 @@ mvn.cmd -version
 2. `sql/oa_attendance.sql`
 3. `sql/oa_flow.sql`
 4. `sql/oa_notice.sql`
-5. `sql/init_data.sql`
+5. `sql/oa_ai.sql`
+6. `sql/init_data.sql`
 
-前四个脚本创建独立逻辑数据库和业务表，最后一个脚本写入组织、演示账号、角色、菜单、API 权限和初始公告。
+前五个脚本创建独立逻辑数据库，其中现有四个业务脚本同时创建基础业务表；最后一个脚本写入组织、演示账号、角色、菜单、API 权限和初始公告。
 可以直接在数据库管理工具中依次执行。使用 MySQL CLI 时，可在 `cmd.exe` 中从项目根目录执行：
 
 ```bat
@@ -51,6 +53,7 @@ mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_user.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_attendance.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_flow.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_notice.sql
+mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_ai.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\init_data.sql
 ```
 
@@ -75,8 +78,8 @@ JWT_SECRET=一段至少32字节的随机密钥
 OA_DB_PASSWORD=本地MySQL密码
 ```
 
-五个服务会在从后端根目录或各自模块目录启动时自动读取同一份根目录 `.env`。其中
-`user-service` 和 `oa-gateway` 会共享 `JWT_SECRET`，四个业务服务会共享 `OA_DB_PASSWORD`。
+六个服务会在从后端根目录或各自模块目录启动时自动读取同一份根目录 `.env`。其中
+`user-service` 和 `oa-gateway` 会共享 `JWT_SECRET`，五个数据服务会共享 `OA_DB_PASSWORD`。
 真实 `.env` 已被 Git 忽略，不得提交。
 
 需要连接非本地环境时，仍可通过原有的 `NACOS_*`、`REDIS_*`、`OA_*_DB_URL`、
@@ -97,7 +100,7 @@ OA_DB_PASSWORD=本地MySQL密码
 
 ## OpenAPI、Swagger UI 与 Apifox
 
-四个业务服务通过 Springdoc 生成 OpenAPI 3 文档，Gateway 提供统一访问入口：
+五个数据与业务服务通过 Springdoc 生成 OpenAPI 3 文档，Gateway 提供统一访问入口：
 
 | 服务 | OpenAPI 地址 |
 | --- | --- |
@@ -105,9 +108,10 @@ OA_DB_PASSWORD=本地MySQL密码
 | 考勤 | `http://localhost:8088/openapi/attendance` |
 | 审批 | `http://localhost:8088/openapi/flow` |
 | 公告 | `http://localhost:8088/openapi/notice` |
+| 搜索与智能平台 | `http://localhost:8088/openapi/intelligence` |
 
 聚合 Swagger UI 地址为 `http://localhost:8088/swagger-ui.html`，可以通过页面顶部下拉框切换服务。
-在 Apifox 中选择 OpenAPI/Swagger 导入，依次导入上述四个 OpenAPI 地址即可同步到同一个项目。
+在 Apifox 中选择 OpenAPI/Swagger 导入，依次导入上述五个 OpenAPI 地址即可同步到同一个项目。
 接口请求仍统一使用 `http://localhost:8088` 作为环境 Base URL。
 
 ## 启动服务
@@ -118,13 +122,14 @@ OA_DB_PASSWORD=本地MySQL密码
 mvn.cmd clean install -DskipTests
 ```
 
-随后在五个独立终端中依次启动用户服务、其他业务服务和 Gateway：
+随后在六个独立终端中依次启动用户服务、其他业务服务和 Gateway：
 
 ```powershell
 mvn.cmd -f user-service/pom.xml spring-boot:run
 mvn.cmd -f attendance-service/pom.xml spring-boot:run
 mvn.cmd -f flow-service/pom.xml spring-boot:run
 mvn.cmd -f notice-service/pom.xml spring-boot:run
+mvn.cmd -f intelligence-service/pom.xml spring-boot:run
 mvn.cmd -f oa-gateway/pom.xml spring-boot:run
 ```
 
@@ -137,6 +142,7 @@ http://localhost:9001/actuator/health
 http://localhost:9002/actuator/health
 http://localhost:9003/actuator/health
 http://localhost:9004/actuator/health
+http://localhost:9005/actuator/health
 ```
 
 ## 演示账号

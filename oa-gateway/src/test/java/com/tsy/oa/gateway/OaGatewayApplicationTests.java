@@ -48,7 +48,8 @@ class OaGatewayApplicationTests {
                 "user-service", "/api/user/**",
                 "attendance-service", "/api/attendance/**",
                 "flow-service", "/api/flow/**",
-                "notice-service", "/api/notices/**"
+                "notice-service", "/api/notices/**",
+                "intelligence-service", "/api/intelligence/**"
         );
 
         expectedRoutes.forEach((serviceName, pathPattern) -> {
@@ -76,7 +77,8 @@ class OaGatewayApplicationTests {
                 "user-openapi", List.of("user-service", "/openapi/user"),
                 "attendance-openapi", List.of("attendance-service", "/openapi/attendance"),
                 "flow-openapi", List.of("flow-service", "/openapi/flow"),
-                "notice-openapi", List.of("notice-service", "/openapi/notice")
+                "notice-openapi", List.of("notice-service", "/openapi/notice"),
+                "intelligence-openapi", List.of("intelligence-service", "/openapi/intelligence")
         );
 
         expectedRoutes.forEach((routeId, expected) -> {
@@ -106,6 +108,6 @@ class OaGatewayApplicationTests {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.urls.length()").isEqualTo(4);
+                .jsonPath("$.urls.length()").isEqualTo(5);
     }
 }
