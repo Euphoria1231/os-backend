@@ -57,6 +57,17 @@ class FeignSearchDocumentSourceGatewayTests {
     }
 
     @Test
+    void returnsEmptyWhenCanonicalSourceNoLongerExists() {
+        NoticeSearchSourceClient noticeClient = noticeId -> ApiResponse.failure(40401, "公告不存在");
+        ApplicationSearchSourceClient applicationClient =
+                applicationId -> ApiResponse.failure(40401, "审批申请不存在");
+        FeignSearchDocumentSourceGateway gateway = gateway(noticeClient, applicationClient);
+
+        assertThat(gateway.findNotice(42L)).isEmpty();
+        assertThat(gateway.findApplication(15L)).isEmpty();
+    }
+
+    @Test
     void normalizesApplicationResponseAndRejectsMismatchedId() {
         ApplicationSearchSourceClient applicationClient = applicationId -> ApiResponse.success(
                 new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(

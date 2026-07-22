@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.intelligence.search.event.persistence.SearchIndexEventSequenceMapper">
+
+    <insert id="insert">
+        INSERT INTO search_index_event_sequence (
+            event_id,
+            created_at
+        ) VALUES (
+            #{eventId},
+            #{createdAt}
+        )
+    </insert>
+
+    <select id="findMaximumSequence" resultType="long">
+        SELECT COALESCE(MAX(sequence_id), 0)
+        FROM search_index_event_sequence
+    </select>
+
+    <select id="findProcessedAfter"
+            resultType="com.tsy.oa.intelligence.search.event.persistence.SearchIndexReplayDelta">
+        SELECT event_sequence.sequence_id,
+               event_record.aggregate_id,
+               event_record.operation
+        FROM search_index_event_sequence event_sequence
+        INNER JOIN search_index_event_record event_record
+                ON event_record.event_id = event_sequence.event_id
+        WHERE event_record.aggregate_type = #{aggregateType}
+          AND event_record.processing_status = 'PROCESSED'
+          AND event_sequence.sequence_id > #{afterSequence}
+        ORDER BY event_sequence.sequence_id ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

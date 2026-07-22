@@ -7,6 +7,7 @@ import com.tsy.oa.intelligence.search.config.ElasticsearchSearchProperties;
 import com.tsy.oa.intelligence.search.dto.IndexHealthResponse;
 import com.tsy.oa.intelligence.search.dto.RebuildProgressResponse;
 import com.tsy.oa.intelligence.search.event.SearchDocumentNormalizer;
+import com.tsy.oa.intelligence.search.event.SearchIndexEvent;
 import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient;
 import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourcePageClient;
 import com.tsy.oa.intelligence.search.event.source.NoticeSearchSourceClient;
@@ -35,6 +36,8 @@ public class SearchIndexAdministrationService {
     private final ApplicationSearchSourcePageClient applicationSourceClient;
     private final SearchIndexRepository searchIndexRepository;
     private final SearchDocumentNormalizer documentNormalizer;
+    private final SearchIndexCutoverCoordinator cutoverCoordinator;
+    private final SearchIndexCutoverFinalizer cutoverFinalizer;
     private final AtomicBoolean noticeRebuildRunning = new AtomicBoolean();
     private final AtomicBoolean applicationRebuildRunning = new AtomicBoolean();
     private final AtomicReference<RebuildProgressResponse> noticeProgress =
@@ -48,7 +51,9 @@ public class SearchIndexAdministrationService {
             NoticeSearchSourcePageClient noticeSourceClient,
             ApplicationSearchSourcePageClient applicationSourceClient,
             SearchIndexRepository searchIndexRepository,
-            SearchDocumentNormalizer documentNormalizer
+            SearchDocumentNormalizer documentNormalizer,
+            SearchIndexCutoverCoordinator cutoverCoordinator,
+            SearchIndexCutoverFinalizer cutoverFinalizer
     ) {
         this.gateway = gateway;
         this.properties = properties;
@@ -56,6 +61,8 @@ public class SearchIndexAdministrationService {
         this.applicationSourceClient = applicationSourceClient;
         this.searchIndexRepository = searchIndexRepository;
         this.documentNormalizer = documentNormalizer;
+        this.cutoverCoordinator = cutoverCoordinator;
+        this.cutoverFinalizer = cutoverFinalizer;
     }
 
     public RebuildProgressResponse rebuildNotices() {
@@ -63,6 +70,9 @@ public class SearchIndexAdministrationService {
         LocalDateTime startedAt = LocalDateTime.now();
         noticeProgress.set(running("NOTICES", startedAt));
         try {
+            long watermark = cutoverCoordinator.captureWatermark(
+                    SearchIndexEvent.AggregateType.NOTICE
+            );
             String stagingIndex = stagingIndex(properties.getNoticeAlias());
             gateway.createIndex(stagingIndex, SearchIndexSchema.NOTICE_DEFINITION);
             int page = 1;
@@ -87,8 +97,7 @@ public class SearchIndexAdministrationService {
                 ));
                 if (!sourcePage.hasNext()) {
                     requireComplete(processed, expectedTotal, "notice");
-                    gateway.refreshIndex(stagingIndex);
-                    gateway.switchAlias(properties.getNoticeAlias(), stagingIndex);
+                    cutoverFinalizer.finalizeNotices(stagingIndex, watermark);
                     return complete(noticeProgress, "NOTICES", processed, expectedTotal, page, startedAt);
                 }
                 requireProgress(documents, "notice");
@@ -107,6 +116,9 @@ public class SearchIndexAdministrationService {
         LocalDateTime startedAt = LocalDateTime.now();
         applicationProgress.set(running("APPLICATIONS", startedAt));
         try {
+            long watermark = cutoverCoordinator.captureWatermark(
+                    SearchIndexEvent.AggregateType.APPLICATION
+            );
             String stagingIndex = stagingIndex(properties.getApplicationAlias());
             gateway.createIndex(stagingIndex, SearchIndexSchema.APPLICATION_DEFINITION);
             int page = 1;
@@ -131,8 +143,7 @@ public class SearchIndexAdministrationService {
                 ));
                 if (!sourcePage.hasNext()) {
                     requireComplete(processed, expectedTotal, "application");
-                    gateway.refreshIndex(stagingIndex);
-                    gateway.switchAlias(properties.getApplicationAlias(), stagingIndex);
+                    cutoverFinalizer.finalizeApplications(stagingIndex, watermark);
                     return complete(
                             applicationProgress, "APPLICATIONS", processed, expectedTotal, page, startedAt
                     );

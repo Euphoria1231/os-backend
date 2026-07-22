@@ -62,6 +62,39 @@ public class ElasticsearchSearchIndexRepository implements SearchIndexRepository
     }
 
     @Override
+    public void saveNoticeToIndex(String indexName, NoticeSearchDocument document) throws IOException {
+        Objects.requireNonNull(document, "document must not be null");
+        gateway.upsertDocument(
+                indexName,
+                NOTICE_ID_PREFIX + document.noticeId(),
+                objectMapper.writeValueAsString(document)
+        );
+    }
+
+    @Override
+    public void deleteNoticeFromIndex(String indexName, long noticeId) throws IOException {
+        gateway.deleteDocument(indexName, NOTICE_ID_PREFIX + noticeId);
+    }
+
+    @Override
+    public void saveApplicationToIndex(
+            String indexName,
+            ApplicationSearchDocument document
+    ) throws IOException {
+        Objects.requireNonNull(document, "document must not be null");
+        gateway.upsertDocument(
+                indexName,
+                APPLICATION_ID_PREFIX + document.applicationId(),
+                objectMapper.writeValueAsString(document)
+        );
+    }
+
+    @Override
+    public void deleteApplicationFromIndex(String indexName, long applicationId) throws IOException {
+        gateway.deleteDocument(indexName, APPLICATION_ID_PREFIX + applicationId);
+    }
+
+    @Override
     public void saveNotices(List<NoticeSearchDocument> documents) throws IOException {
         bulkSave(properties.getNoticeAlias(), NOTICE_ID_PREFIX, documents, NoticeSearchDocument::noticeId);
     }

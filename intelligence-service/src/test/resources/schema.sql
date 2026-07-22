@@ -18,3 +18,14 @@ CREATE TABLE IF NOT EXISTS search_index_aggregate_state (
     updated_at TIMESTAMP(3) NOT NULL,
     PRIMARY KEY (aggregate_type, aggregate_id)
 );
+
+CREATE TABLE IF NOT EXISTS search_index_cutover_barrier (
+    aggregate_type VARCHAR(32) PRIMARY KEY,
+    updated_at TIMESTAMP(3) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS search_index_event_sequence (
+    sequence_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    event_id VARCHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMP(3) NOT NULL
+);

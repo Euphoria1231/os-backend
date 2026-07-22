@@ -57,8 +57,10 @@ class SearchIndexEventProcessorTests {
 
     @BeforeEach
     void setUp() {
+        jdbcTemplate.update("DELETE FROM search_index_event_sequence");
         jdbcTemplate.update("DELETE FROM search_index_event_record");
         jdbcTemplate.update("DELETE FROM search_index_aggregate_state");
+        jdbcTemplate.update("DELETE FROM search_index_cutover_barrier");
         repository.clear();
         sourceGateway.clear();
     }
@@ -72,6 +74,7 @@ class SearchIndexEventProcessorTests {
 
         assertThat(repository.noticeWriteCount).isEqualTo(1);
         assertThat(eventStatus("notice-event-1")).isEqualTo("PROCESSED");
+        assertThat(eventSequenceCount("notice-event-1")).isEqualTo(1);
     }
 
     @Test
@@ -358,6 +361,15 @@ class SearchIndexEventProcessorTests {
     private int eventCount(String eventId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM search_index_event_record WHERE event_id = ?",
+                Integer.class,
+                eventId
+        );
+        return count == null ? 0 : count;
+    }
+
+    private int eventSequenceCount(String eventId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM search_index_event_sequence WHERE event_id = ?",
                 Integer.class,
                 eventId
         );

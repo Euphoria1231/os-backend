@@ -18,10 +18,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public final class ElasticsearchStubServer implements AutoCloseable {
 
     private final HttpServer server;
+    private final ExecutorService executor = Executors.newCachedThreadPool();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, String> documents = new LinkedHashMap<>();
     private final Map<String, String> indexDefinitions = new LinkedHashMap<>();
@@ -42,10 +47,14 @@ public final class ElasticsearchStubServer implements AutoCloseable {
     private boolean analyzerAvailable = true;
     private String searchResponse = "{\"hits\":{\"total\":{\"value\":0,\"relation\":\"eq\"},\"hits\":[]}}";
     private String lastSearchRequestBody;
+    private volatile boolean pauseNextBulkResponse;
+    private volatile CountDownLatch pausedBulkApplied = new CountDownLatch(0);
+    private volatile CountDownLatch releasePausedBulkResponse = new CountDownLatch(0);
 
     public ElasticsearchStubServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/", this::handle);
+        server.setExecutor(executor);
         server.start();
     }
 
@@ -111,6 +120,20 @@ public final class ElasticsearchStubServer implements AutoCloseable {
         bulkResponses.addAll(List.of(responses));
     }
 
+    public void pauseNextBulkResponseAfterApply() {
+        pauseNextBulkResponse = true;
+        pausedBulkApplied = new CountDownLatch(1);
+        releasePausedBulkResponse = new CountDownLatch(1);
+    }
+
+    public boolean awaitPausedBulkApplied() throws InterruptedException {
+        return pausedBulkApplied.await(5, TimeUnit.SECONDS);
+    }
+
+    public void releasePausedBulkResponse() {
+        releasePausedBulkResponse.countDown();
+    }
+
     public void setRefreshResponses(String... responses) {
         refreshResponses.clear();
         refreshResponses.addAll(List.of(responses));
@@ -148,6 +171,10 @@ public final class ElasticsearchStubServer implements AutoCloseable {
         aliasRequests.clear();
         searchResponse = "{\"hits\":{\"total\":{\"value\":0,\"relation\":\"eq\"},\"hits\":[]}}";
         lastSearchRequestBody = null;
+        pauseNextBulkResponse = false;
+        pausedBulkApplied = new CountDownLatch(0);
+        releasePausedBulkResponse.countDown();
+        releasePausedBulkResponse = new CountDownLatch(0);
     }
 
     public void setNoticeSourceResponses(String... responses) {
@@ -166,7 +193,9 @@ public final class ElasticsearchStubServer implements AutoCloseable {
 
     @Override
     public void close() {
+        releasePausedBulkResponse.countDown();
         server.stop(0);
+        executor.shutdownNow();
     }
 
     private void handle(HttpExchange exchange) throws IOException {
@@ -220,6 +249,7 @@ public final class ElasticsearchStubServer implements AutoCloseable {
             if (errors != null && errors.isBoolean() && !errors.booleanValue()) {
                 applyBulk(requestBody);
             }
+            pauseAfterBulkAppliedIfRequested();
             respond(exchange, 200, response);
             return;
         }
@@ -308,6 +338,22 @@ public final class ElasticsearchStubServer implements AutoCloseable {
         }
 
         respond(exchange, 404, "{\"error\":\"not found\"}");
+    }
+
+    private void pauseAfterBulkAppliedIfRequested() throws IOException {
+        if (!pauseNextBulkResponse) {
+            return;
+        }
+        pauseNextBulkResponse = false;
+        pausedBulkApplied.countDown();
+        try {
+            if (!releasePausedBulkResponse.await(5, TimeUnit.SECONDS)) {
+                throw new IOException("timed out waiting to release bulk response");
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted while pausing bulk response", exception);
+        }
     }
 
     private void handleDocument(

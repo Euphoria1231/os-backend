@@ -16,6 +16,25 @@ public interface SearchIndexRepository {
 
     void deleteApplication(long applicationId) throws IOException;
 
+    default void saveNoticeToIndex(String indexName, NoticeSearchDocument document) throws IOException {
+        saveNotice(document);
+    }
+
+    default void deleteNoticeFromIndex(String indexName, long noticeId) throws IOException {
+        deleteNotice(noticeId);
+    }
+
+    default void saveApplicationToIndex(
+            String indexName,
+            ApplicationSearchDocument document
+    ) throws IOException {
+        saveApplication(document);
+    }
+
+    default void deleteApplicationFromIndex(String indexName, long applicationId) throws IOException {
+        deleteApplication(applicationId);
+    }
+
     default void saveNotices(List<NoticeSearchDocument> documents) throws IOException {
         for (NoticeSearchDocument document : documents) {
             saveNotice(document);

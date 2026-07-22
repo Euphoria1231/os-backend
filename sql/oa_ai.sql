@@ -27,3 +27,18 @@ CREATE TABLE IF NOT EXISTS search_index_aggregate_state (
     PRIMARY KEY (aggregate_type, aggregate_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='搜索索引聚合版本状态';
+
+CREATE TABLE IF NOT EXISTS search_index_cutover_barrier (
+    aggregate_type VARCHAR(32) PRIMARY KEY COMMENT 'NOTICE或APPLICATION',
+    updated_at DATETIME(3) NOT NULL COMMENT '屏障初始化时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='搜索索引重建切换屏障';
+
+CREATE TABLE IF NOT EXISTS search_index_event_sequence (
+    sequence_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '全局严格递增事件序号',
+    event_id VARCHAR(64) NOT NULL COMMENT '搜索索引事件ID',
+    created_at DATETIME(3) NOT NULL COMMENT '序号分配时间',
+    PRIMARY KEY (sequence_id),
+    UNIQUE KEY uk_search_event_sequence_event (event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='搜索索引事件全局顺序';

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.intelligence.search.event.persistence.SearchIndexCutoverBarrierMapper">
+
+    <insert id="initializeIfAbsent">
+        INSERT IGNORE INTO search_index_cutover_barrier (
+            aggregate_type,
+            updated_at
+        ) VALUES (
+            #{aggregateType},
+            #{updatedAt}
+        )
+    </insert>
+
+    <select id="findForUpdate" resultType="java.lang.String">
+        SELECT aggregate_type
+        FROM search_index_cutover_barrier
+        WHERE aggregate_type = #{aggregateType}
+        FOR UPDATE
+    </select>
+
+</mapper>

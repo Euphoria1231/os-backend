@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.intelligence.search.event.persistence.SearchIndexAggregateState;
 import com.tsy.oa.intelligence.search.event.persistence.SearchIndexAggregateStateMapper;
 import com.tsy.oa.intelligence.search.event.persistence.SearchIndexEventRecordMapper;
+import com.tsy.oa.intelligence.search.event.persistence.SearchIndexEventSequenceMapper;
 import com.tsy.oa.intelligence.search.event.source.SearchDocumentSourceGateway;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
 import com.tsy.oa.intelligence.search.model.NoticeSearchDocument;
 import com.tsy.oa.intelligence.search.repository.SearchIndexRepository;
+import com.tsy.oa.intelligence.search.service.SearchIndexCutoverCoordinator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,8 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
 
     private final SearchIndexEventRecordMapper eventRecordMapper;
     private final SearchIndexAggregateStateMapper aggregateStateMapper;
+    private final SearchIndexEventSequenceMapper eventSequenceMapper;
+    private final SearchIndexCutoverCoordinator cutoverCoordinator;
     private final SearchIndexRepository indexRepository;
     private final SearchDocumentSourceGateway sourceGateway;
     private final ObjectMapper objectMapper;
@@ -33,6 +37,8 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
     public SearchIndexEventProcessor(
             SearchIndexEventRecordMapper eventRecordMapper,
             SearchIndexAggregateStateMapper aggregateStateMapper,
+            SearchIndexEventSequenceMapper eventSequenceMapper,
+            SearchIndexCutoverCoordinator cutoverCoordinator,
             SearchIndexRepository indexRepository,
             SearchDocumentSourceGateway sourceGateway,
             ObjectMapper objectMapper,
@@ -40,6 +46,8 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
     ) {
         this.eventRecordMapper = eventRecordMapper;
         this.aggregateStateMapper = aggregateStateMapper;
+        this.eventSequenceMapper = eventSequenceMapper;
+        this.cutoverCoordinator = cutoverCoordinator;
         this.indexRepository = indexRepository;
         this.sourceGateway = sourceGateway;
         this.objectMapper = objectMapper;
@@ -53,6 +61,8 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
         String aggregateType = event.aggregateType().name();
         String operation = event.operation().name();
 
+        cutoverCoordinator.lock(event.aggregateType());
+
         int claimed = eventRecordMapper.claim(
                 event.eventId(),
                 aggregateType,
@@ -62,6 +72,9 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
         );
         if (claimed == 0) {
             return SearchEventProcessingResult.DUPLICATE;
+        }
+        if (eventSequenceMapper.insert(event.eventId(), now()) != 1) {
+            throw new IllegalStateException("Failed to allocate search index event sequence");
         }
 
         int initialized = aggregateStateMapper.initializeIfAbsent(

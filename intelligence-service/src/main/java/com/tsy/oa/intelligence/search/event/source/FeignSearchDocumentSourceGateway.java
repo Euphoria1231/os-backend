@@ -4,7 +4,10 @@ import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.intelligence.search.event.SearchDocumentNormalizer;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
 import com.tsy.oa.intelligence.search.model.NoticeSearchDocument;
+import feign.FeignException;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 @Component
 public class FeignSearchDocumentSourceGateway implements SearchDocumentSourceGateway {
@@ -52,6 +55,57 @@ public class FeignSearchDocumentSourceGateway implements SearchDocumentSourceGat
                 source.createdAt(),
                 source.updatedAt()
         ));
+    }
+
+    @Override
+    public Optional<NoticeSearchDocument> findNotice(long noticeId) {
+        try {
+            ApiResponse<NoticeSearchSourceClient.NoticeSearchSourceResponse> response =
+                    noticeClient.getById(noticeId);
+            if (isNotFound(response)) {
+                return Optional.empty();
+            }
+            NoticeSearchSourceClient.NoticeSearchSourceResponse source =
+                    requireData(response, "notice", noticeId);
+            return Optional.of(documentNormalizer.normalizeNotice(new NoticeSearchDocument(
+                    requireMatchingId(source.id(), noticeId, "notice"),
+                    source.title(),
+                    source.content(),
+                    source.publishedAt(),
+                    source.status()
+            )));
+        } catch (FeignException.NotFound exception) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public Optional<ApplicationSearchDocument> findApplication(long applicationId) {
+        try {
+            ApiResponse<ApplicationSearchSourceClient.ApplicationSearchSourceResponse> response =
+                    applicationClient.getById(applicationId);
+            if (isNotFound(response)) {
+                return Optional.empty();
+            }
+            ApplicationSearchSourceClient.ApplicationSearchSourceResponse source =
+                    requireData(response, "application", applicationId);
+            return Optional.of(documentNormalizer.normalizeApplication(new ApplicationSearchDocument(
+                    requireMatchingId(source.id(), applicationId, "application"),
+                    requireId(source.applicantId(), "application applicant"),
+                    requireId(source.approverId(), "application approver"),
+                    source.applicationType(),
+                    source.status(),
+                    source.reason(),
+                    source.createdAt(),
+                    source.updatedAt()
+            )));
+        } catch (FeignException.NotFound exception) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean isNotFound(ApiResponse<?> response) {
+        return response != null && response.code() >= 40400 && response.code() < 40500;
     }
 
     private <T> T requireData(ApiResponse<T> response, String sourceType, long sourceId) {
