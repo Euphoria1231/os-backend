@@ -2,6 +2,7 @@ package com.tsy.oa.user.employee.service;
 
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.user.department.mapper.DepartmentMapper;
+import com.tsy.oa.user.employee.dto.ApprovalRouteResponse;
 import com.tsy.oa.user.employee.dto.EmployeeCreateRequest;
 import com.tsy.oa.user.employee.dto.EmployeeResponse;
 import com.tsy.oa.user.employee.dto.EmployeeUpdateRequest;
@@ -71,6 +72,15 @@ public class EmployeeService {
         return employeeMapper.findByLeaderId(leaderId).stream()
                 .map(EmployeeResponse::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ApprovalRouteResponse getApprovalRoute(Long applicantId) {
+        ApprovalRouteResponse approvalRoute = employeeMapper.findApprovalRoute(applicantId);
+        if (approvalRoute == null) {
+            throw new BusinessException(UserErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+        return approvalRoute;
     }
 
     @Transactional

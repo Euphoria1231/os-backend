@@ -70,6 +70,31 @@
         ORDER BY e.id
     </select>
 
+    <resultMap id="ApprovalRouteResultMap" type="com.tsy.oa.user.employee.dto.ApprovalRouteResponse">
+        <constructor>
+            <arg column="applicant_id" javaType="java.lang.Long"/>
+            <arg column="direct_leader_id" javaType="java.lang.Long"/>
+            <arg column="direct_leader_name" javaType="java.lang.String"/>
+            <arg column="department_leader_id" javaType="java.lang.Long"/>
+            <arg column="department_leader_name" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findApprovalRoute" resultMap="ApprovalRouteResultMap">
+        SELECT e.id AS applicant_id,
+               direct_leader.id AS direct_leader_id,
+               direct_leader.real_name AS direct_leader_name,
+               department_leader.id AS department_leader_id,
+               department_leader.real_name AS department_leader_name
+        FROM employee e
+        LEFT JOIN department d ON d.id = e.department_id
+        LEFT JOIN employee direct_leader
+               ON direct_leader.id = e.leader_id AND direct_leader.status = 1
+        LEFT JOIN employee department_leader
+               ON department_leader.id = d.leader_employee_id AND department_leader.status = 1
+        WHERE e.id = #{applicantId}
+    </select>
+
     <update id="update">
         UPDATE employee
         SET real_name = #{realName}, department_id = #{departmentId}, position_id = #{positionId},

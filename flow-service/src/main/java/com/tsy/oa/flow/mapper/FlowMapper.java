@@ -24,8 +24,47 @@ public interface FlowMapper {
 
     int updateApplicationStatusIfPending(@Param("id") Long id, @Param("status") String status);
 
+    int updateApplicationApproverIfPending(
+            @Param("id") Long id,
+            @Param("approverId") Long approverId
+    );
+
+    int insertApprovalTask(
+            @Param("applicationId") Long applicationId,
+            @Param("approvalLevel") Integer approvalLevel,
+            @Param("approverId") Long approverId,
+            @Param("approverName") String approverName,
+            @Param("status") String status,
+            @Param("activatedAt") LocalDateTime activatedAt
+    );
+
+    ApprovalTaskRecord findPendingTaskByApplication(Long applicationId);
+
+    ApprovalTaskRecord findTaskByApplicationAndApprover(
+            @Param("applicationId") Long applicationId,
+            @Param("approverId") Long approverId
+    );
+
+    ApprovalTaskRecord findNextWaitingTask(
+            @Param("applicationId") Long applicationId,
+            @Param("approvalLevel") Integer approvalLevel
+    );
+
+    List<ApprovalTaskRecord> findTasksByApplication(Long applicationId);
+
+    int updateApprovalTaskStatusIfPending(
+            @Param("id") Long id,
+            @Param("status") String status
+    );
+
+    int activateApprovalTaskIfWaiting(Long id);
+
+    int cancelWaitingTasks(Long applicationId);
+
     int insertApprovalRecord(
             @Param("applicationId") Long applicationId,
+            @Param("taskId") Long taskId,
+            @Param("approvalLevel") Integer approvalLevel,
             @Param("approverId") Long approverId,
             @Param("action") String action,
             @Param("comment") String comment

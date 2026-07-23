@@ -2,5 +2,14 @@ package com.tsy.oa.flow.employee;
 
 public interface EmployeeDirectory {
 
-    Long findDirectLeaderId(Long employeeId);
+    ApprovalRoute findApprovalRoute(Long employeeId);
+
+    record ApprovalRoute(
+            Long applicantId,
+            Long directLeaderId,
+            String directLeaderName,
+            Long departmentLeaderId,
+            String departmentLeaderName
+    ) {
+    }
 }

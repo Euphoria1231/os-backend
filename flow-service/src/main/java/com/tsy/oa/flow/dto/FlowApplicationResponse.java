@@ -3,6 +3,7 @@ package com.tsy.oa.flow.dto;
 import com.tsy.oa.flow.model.FlowApplication;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record FlowApplicationResponse(
         Long id,
@@ -16,15 +17,19 @@ public record FlowApplicationResponse(
         String reason,
         String status,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        List<ApprovalProgressResponse> approvalProgress
 ) {
-    public static FlowApplicationResponse from(FlowApplication application) {
+    public static FlowApplicationResponse from(
+            FlowApplication application,
+            List<ApprovalProgressResponse> approvalProgress
+    ) {
         return new FlowApplicationResponse(
                 application.getId(), application.getApplicationNo(), application.getApplicantId(),
                 application.getApproverId(), application.getApplicationType(),
                 application.getAttendanceRecordId(), application.getStartTime(),
                 application.getEndTime(), application.getReason(), application.getStatus(),
-                application.getCreatedAt(), application.getUpdatedAt()
+                application.getCreatedAt(), application.getUpdatedAt(), approvalProgress
         );
     }
 }

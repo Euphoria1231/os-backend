@@ -60,9 +60,10 @@ class FlowControllerTests {
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
+        jdbcTemplate.update("DELETE FROM approval_task");
         jdbcTemplate.update("DELETE FROM flow_application");
         employeeDirectory.clear();
-        employeeDirectory.setLeader(10L, 20L);
+        employeeDirectory.setApprovalRoute(10L, 20L, 30L);
         attendanceMakeupGateway.clear();
         attendanceMakeupGateway.allow(
                 1L, 10L, LocalDate.of(2026, 7, 20), 5
@@ -70,8 +71,10 @@ class FlowControllerTests {
     }
 
     @Test
-    void submitsLeaveAndCompletesLeaderApproval() throws Exception {
+    void activatesDepartmentLeaderAfterDirectLeaderApprovalAndCompletesOnSecondApproval() throws Exception {
         long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        assertEquals(List.of("1:PENDING", "2:WAITING"), taskStates(applicationId));
 
         mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
@@ -79,18 +82,34 @@ class FlowControllerTests {
                 .andExpect(jsonPath("$.data[0].applicationType").value("LEAVE"));
 
         mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
-                        .header(EMPLOYEE_HEADER, "20")
+                .header(EMPLOYEE_HEADER, "20")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"comment\":\"同意，请做好工作交接\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.approverId").value(30));
+
+        assertEquals(List.of("1:APPROVED", "2:PENDING"), taskStates(applicationId));
 
         mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));
         mockMvc.perform(get("/api/flow/tasks/done").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].approvalLevel").value(1))
                 .andExpect(jsonPath("$.data[0].action").value("APPROVE"));
+
+        mockMvc.perform(get("/api/flow/tasks/todo").header(EMPLOYEE_HEADER, "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(applicationId));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
         mockMvc.perform(get("/api/flow/applications/mine").header(EMPLOYEE_HEADER, "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("APPROVED"));
@@ -147,11 +166,20 @@ class FlowControllerTests {
     }
 
     @Test
-    void directLeaderApprovesMakeupAndCompletesAttendance() throws Exception {
+    void completesMakeupOnlyAfterDepartmentLeaderApproval() throws Exception {
         long applicationId = submitMakeup(1L);
 
         mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
                         .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意补签\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        assertEquals(0, attendanceMakeupGateway.completionCount());
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"comment\":\"同意补签\"}"))
                 .andExpect(status().isOk())
@@ -178,12 +206,20 @@ class FlowControllerTests {
     @Test
     void keepsMakeupPendingWhenAttendanceCompletionFails() throws Exception {
         long applicationId = submitMakeup(1L);
-        attendanceMakeupGateway.failCompletion();
 
         mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
                         .header(EMPLOYEE_HEADER, "20")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"comment\":\"同意补签\"}"))
+                        .content("{\"comment\":\"直属领导同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        attendanceMakeupGateway.failCompletion();
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"部门负责人同意\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40904));
 
@@ -192,11 +228,71 @@ class FlowControllerTests {
                 String.class,
                 applicationId
         ));
-        assertEquals(0, jdbcTemplate.queryForObject(
+        assertEquals(List.of("1:APPROVED", "2:PENDING"), taskStates(applicationId));
+        assertEquals(1, jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM approval_record WHERE application_id = ?",
                 Integer.class,
                 applicationId
         ));
+    }
+
+    @Test
+    void createsOneTaskWhenBothApprovalLevelsUseSameEmployee() throws Exception {
+        employeeDirectory.setApprovalRoute(10L, 20L, 20L);
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        assertEquals(List.of("1:PENDING"), taskStates(applicationId));
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.approvalProgress.length()").value(1));
+    }
+
+    @Test
+    void rejectsSubmissionWithoutDepartmentLeader() throws Exception {
+        employeeDirectory.setApprovalRoute(10L, 20L, null);
+
+        mockMvc.perform(post("/api/flow/applications/leave")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(applicationJson("家庭事务")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42202));
+    }
+
+    @Test
+    void cancelsWaitingDepartmentTaskWhenDirectLeaderRejects() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/reject", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"不同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        assertEquals(List.of("1:REJECTED", "2:CANCELLED"), taskStates(applicationId));
+    }
+
+    @Test
+    void rejectsRepeatedApprovalOfCompletedDirectLeaderTask() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"重复同意\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40901));
     }
 
     @Test
@@ -294,6 +390,16 @@ class FlowControllerTests {
     private record ApplicationPayload(LocalDateTime startTime, LocalDateTime endTime, String reason) {
     }
 
+    private List<String> taskStates(long applicationId) {
+        return jdbcTemplate.query(
+                "SELECT approval_level, status FROM approval_task "
+                        + "WHERE application_id = ? ORDER BY approval_level",
+                (resultSet, rowNumber) -> resultSet.getInt("approval_level")
+                        + ":" + resultSet.getString("status"),
+                applicationId
+        );
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.flow")
@@ -319,18 +425,40 @@ class FlowControllerTests {
     static class InMemoryEmployeeDirectory implements EmployeeDirectory {
 
         private final Map<Long, Long> leaders = new ConcurrentHashMap<>();
+        private final Map<Long, Long> departmentLeaders = new ConcurrentHashMap<>();
 
         @Override
-        public Long findDirectLeaderId(Long employeeId) {
-            return leaders.get(employeeId);
+        public ApprovalRoute findApprovalRoute(Long employeeId) {
+            Long directLeaderId = leaders.get(employeeId);
+            Long departmentLeaderId = departmentLeaders.get(employeeId);
+            if (directLeaderId == null && departmentLeaderId == null) {
+                return null;
+            }
+            return new ApprovalRoute(
+                    employeeId,
+                    directLeaderId,
+                    directLeaderId == null ? null : "直属领导",
+                    departmentLeaderId,
+                    departmentLeaderId == null ? null : "部门负责人"
+            );
         }
 
-        void setLeader(Long employeeId, Long leaderId) {
-            leaders.put(employeeId, leaderId);
+        void setApprovalRoute(Long employeeId, Long leaderId, Long departmentLeaderId) {
+            if (leaderId != null) {
+                leaders.put(employeeId, leaderId);
+            } else {
+                leaders.remove(employeeId);
+            }
+            if (departmentLeaderId != null) {
+                departmentLeaders.put(employeeId, departmentLeaderId);
+            } else {
+                departmentLeaders.remove(employeeId);
+            }
         }
 
         void clear() {
             leaders.clear();
+            departmentLeaders.clear();
         }
     }
 

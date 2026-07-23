@@ -1,6 +1,7 @@
 package com.tsy.oa.user.employee.mapper;
 
 import com.tsy.oa.user.employee.model.Employee;
+import com.tsy.oa.user.employee.dto.ApprovalRouteResponse;
 import com.tsy.oa.user.dashboard.dto.NameCountResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -14,6 +15,7 @@ public interface EmployeeMapper {
     Employee findByUsername(String username);
     List<Employee> findAll();
     List<Employee> findByLeaderId(Long leaderId);
+    ApprovalRouteResponse findApprovalRoute(Long applicantId);
     int update(Employee employee);
     int deleteById(Long id);
     int countByEmployeeNo(@Param("employeeNo") String employeeNo, @Param("excludeId") Long excludeId);

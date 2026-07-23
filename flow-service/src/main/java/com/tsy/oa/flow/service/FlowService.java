@@ -7,20 +7,24 @@ import com.tsy.oa.flow.attendance.AttendanceMakeupGateway.MakeupEligibility;
 import com.tsy.oa.flow.dto.ApplicationRequest;
 import com.tsy.oa.flow.dto.ApplicationSearchSourcePageResponse;
 import com.tsy.oa.flow.dto.ApplicationSearchSourceResponse;
+import com.tsy.oa.flow.dto.ApprovalProgressResponse;
 import com.tsy.oa.flow.dto.ApprovalRequest;
 import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
 import com.tsy.oa.flow.dto.MakeupApplicationRequest;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
+import com.tsy.oa.flow.employee.EmployeeDirectory.ApprovalRoute;
 import com.tsy.oa.flow.error.FlowErrorCode;
 import com.tsy.oa.flow.mapper.FlowMapper;
 import com.tsy.oa.flow.mapper.MakeupFlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
+import com.tsy.oa.flow.model.ApprovalTaskRecord;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +33,7 @@ import java.util.UUID;
 public class FlowService {
 
     private static final String PENDING = "PENDING";
+    private static final String WAITING = "WAITING";
     private static final String APPROVED = "APPROVED";
     private static final String REJECTED = "REJECTED";
 
@@ -69,15 +74,12 @@ public class FlowService {
         MakeupEligibility eligibility = attendanceMakeupGateway.getEligibility(
                 attendanceRecordId, applicantId
         );
-        Long approverId = employeeDirectory.findDirectLeaderId(applicantId);
-        if (approverId == null) {
-            throw new BusinessException(FlowErrorCode.DIRECT_LEADER_MISSING);
-        }
+        ApprovalRoute approvalRoute = requireApprovalRoute(applicantId);
 
         FlowApplication application = new FlowApplication();
         application.setApplicationNo(generateApplicationNo("MAKEUP"));
         application.setApplicantId(applicantId);
-        application.setApproverId(approverId);
+        application.setApproverId(approvalRoute.directLeaderId());
         application.setApplicationType("MAKEUP");
         application.setAttendanceRecordId(eligibility.attendanceRecordId());
         application.setMakeupActiveMarker(1);
@@ -91,20 +93,21 @@ public class FlowService {
             }
             throw exception;
         }
-        return FlowApplicationResponse.from(requireApplication(application.getId()));
+        insertApprovalTasks(application.getId(), approvalRoute);
+        return toResponse(requireApplication(application.getId()));
     }
 
     @Transactional(readOnly = true)
     public List<FlowApplicationResponse> listMyApplications(Long applicantId) {
         return flowMapper.findApplicationsByApplicant(applicantId).stream()
-                .map(FlowApplicationResponse::from)
+                .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<FlowApplicationResponse> listTodo(Long approverId) {
         return flowMapper.findPendingApplicationsByApprover(approverId).stream()
-                .map(FlowApplicationResponse::from)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -168,22 +171,20 @@ public class FlowService {
         if (!request.endTime().isAfter(request.startTime())) {
             throw new BusinessException(CommonErrorCode.BAD_REQUEST);
         }
-        Long approverId = employeeDirectory.findDirectLeaderId(applicantId);
-        if (approverId == null) {
-            throw new BusinessException(FlowErrorCode.DIRECT_LEADER_MISSING);
-        }
+        ApprovalRoute approvalRoute = requireApprovalRoute(applicantId);
 
         FlowApplication application = new FlowApplication();
         application.setApplicationNo(generateApplicationNo(applicationType));
         application.setApplicantId(applicantId);
-        application.setApproverId(approverId);
+        application.setApproverId(approvalRoute.directLeaderId());
         application.setApplicationType(applicationType);
         application.setStartTime(request.startTime());
         application.setEndTime(request.endTime());
         application.setReason(request.reason().trim());
         application.setStatus(PENDING);
         flowMapper.insertApplication(application);
-        return FlowApplicationResponse.from(requireApplication(application.getId()));
+        insertApprovalTasks(application.getId(), approvalRoute);
+        return toResponse(requireApplication(application.getId()));
     }
 
     private FlowApplicationResponse process(
@@ -191,36 +192,120 @@ public class FlowService {
             Long approverId,
             String action,
             String targetStatus,
-            String comment
+        String comment
     ) {
         FlowApplication application = requireApplication(applicationId);
-        if (!application.getApproverId().equals(approverId)) {
-            throw new BusinessException(FlowErrorCode.NOT_APPROVER);
-        }
         if (!PENDING.equals(application.getStatus())) {
             throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
+        ApprovalTaskRecord currentTask = flowMapper.findPendingTaskByApplication(applicationId);
+        if (currentTask == null) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        }
+        if (!currentTask.getApproverId().equals(approverId)) {
+            ApprovalTaskRecord employeeTask = flowMapper.findTaskByApplicationAndApprover(
+                    applicationId, approverId
+            );
+            if (employeeTask != null
+                    && (APPROVED.equals(employeeTask.getStatus())
+                    || REJECTED.equals(employeeTask.getStatus()))) {
+                throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+            }
+            throw new BusinessException(FlowErrorCode.NOT_APPROVER);
+        }
+        if (flowMapper.updateApprovalTaskStatusIfPending(
+                currentTask.getId(), targetStatus
+        ) == 0) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        }
+        flowMapper.insertApprovalRecord(
+                applicationId,
+                currentTask.getId(),
+                currentTask.getApprovalLevel(),
+                approverId,
+                action,
+                comment == null || comment.isBlank() ? null : comment.trim()
+        );
+
         boolean makeupApplication = "MAKEUP".equals(application.getApplicationType());
-        if (makeupApplication && APPROVED.equals(targetStatus)) {
+        if (REJECTED.equals(targetStatus)) {
+            finishRejectedApplication(applicationId, makeupApplication);
+        } else {
+            ApprovalTaskRecord nextTask = flowMapper.findNextWaitingTask(
+                    applicationId, currentTask.getApprovalLevel()
+            );
+            if (nextTask == null) {
+                finishApprovedApplication(application);
+            } else {
+                activateNextTask(applicationId, nextTask);
+            }
+        }
+        return toResponse(requireApplication(applicationId));
+    }
+
+    private void finishRejectedApplication(Long applicationId, boolean makeupApplication) {
+        if (flowMapper.updateApplicationStatusIfPending(applicationId, REJECTED) == 0) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
+        }
+        flowMapper.cancelWaitingTasks(applicationId);
+        if (makeupApplication) {
+            makeupFlowMapper.releaseActiveMarker(applicationId);
+        }
+    }
+
+    private void finishApprovedApplication(FlowApplication application) {
+        if ("MAKEUP".equals(application.getApplicationType())) {
             attendanceMakeupGateway.completeMakeup(
                     application.getAttendanceRecordId(),
                     application.getApplicantId(),
                     application.getId()
             );
         }
-        if (flowMapper.updateApplicationStatusIfPending(applicationId, targetStatus) == 0) {
+        if (flowMapper.updateApplicationStatusIfPending(application.getId(), APPROVED) == 0) {
             throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
-        flowMapper.insertApprovalRecord(
-                applicationId,
-                approverId,
-                action,
-                comment == null || comment.isBlank() ? null : comment.trim()
-        );
-        if (makeupApplication && REJECTED.equals(targetStatus)) {
-            makeupFlowMapper.releaseActiveMarker(applicationId);
+    }
+
+    private void activateNextTask(Long applicationId, ApprovalTaskRecord nextTask) {
+        if (flowMapper.activateApprovalTaskIfWaiting(nextTask.getId()) == 0
+                || flowMapper.updateApplicationApproverIfPending(
+                        applicationId, nextTask.getApproverId()
+                ) == 0) {
+            throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
-        return FlowApplicationResponse.from(requireApplication(applicationId));
+    }
+
+    private ApprovalRoute requireApprovalRoute(Long applicantId) {
+        ApprovalRoute approvalRoute = employeeDirectory.findApprovalRoute(applicantId);
+        if (approvalRoute == null || approvalRoute.directLeaderId() == null) {
+            throw new BusinessException(FlowErrorCode.DIRECT_LEADER_MISSING);
+        }
+        if (approvalRoute.departmentLeaderId() == null) {
+            throw new BusinessException(FlowErrorCode.DEPARTMENT_LEADER_MISSING);
+        }
+        return approvalRoute;
+    }
+
+    private void insertApprovalTasks(Long applicationId, ApprovalRoute approvalRoute) {
+        flowMapper.insertApprovalTask(
+                applicationId, 1, approvalRoute.directLeaderId(),
+                approvalRoute.directLeaderName(), PENDING, LocalDateTime.now()
+        );
+        if (!approvalRoute.directLeaderId().equals(approvalRoute.departmentLeaderId())) {
+            flowMapper.insertApprovalTask(
+                    applicationId, 2, approvalRoute.departmentLeaderId(),
+                    approvalRoute.departmentLeaderName(), WAITING, null
+            );
+        }
+    }
+
+    private FlowApplicationResponse toResponse(FlowApplication application) {
+        List<ApprovalProgressResponse> approvalProgress = flowMapper
+                .findTasksByApplication(application.getId())
+                .stream()
+                .map(ApprovalProgressResponse::from)
+                .toList();
+        return FlowApplicationResponse.from(application, approvalProgress);
     }
 
     private void ensureNoActiveMakeupApplication(Long attendanceRecordId) {

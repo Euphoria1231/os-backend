@@ -11,6 +11,7 @@ public enum FlowErrorCode implements ErrorCode {
     MAKEUP_NOT_ELIGIBLE(40903, "当前考勤记录不满足补签条件"),
     MAKEUP_COMPLETION_FAILED(40904, "考勤补签结果更新失败"),
     DIRECT_LEADER_MISSING(42201, "当前员工未配置直属领导"),
+    DEPARTMENT_LEADER_MISSING(42202, "当前员工所在部门未配置部门负责人"),
     ATTENDANCE_SERVICE_UNAVAILABLE(50301, "考勤服务暂不可用");
 
     private final int code;

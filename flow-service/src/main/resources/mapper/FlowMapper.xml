@@ -19,12 +19,18 @@
     </resultMap>
 
     <resultMap id="ApprovalTaskRecordResultMap" type="com.tsy.oa.flow.model.ApprovalTaskRecord">
-        <id property="applicationId" column="application_id"/>
+        <id property="id" column="task_id"/>
+        <result property="applicationId" column="application_id"/>
         <result property="applicationNo" column="application_no"/>
         <result property="applicantId" column="applicant_id"/>
         <result property="applicationType" column="application_type"/>
+        <result property="approvalLevel" column="approval_level"/>
+        <result property="approverId" column="approver_id"/>
+        <result property="approverName" column="approver_name"/>
+        <result property="status" column="task_status"/>
         <result property="action" column="action"/>
         <result property="comment" column="comment"/>
+        <result property="activatedAt" column="activated_at"/>
         <result property="processedAt" column="processed_at"/>
     </resultMap>
 
@@ -59,6 +65,12 @@
         start_time, end_time, reason, status, created_at, updated_at
     </sql>
 
+    <sql id="ApplicationColumnsWithAlias">
+        f.id, f.application_no, f.applicant_id, f.approver_id, f.application_type,
+        f.attendance_record_id, f.makeup_active_marker,
+        f.start_time, f.end_time, f.reason, f.status, f.created_at, f.updated_at
+    </sql>
+
     <insert id="insertApplication" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO flow_application (
             application_no, applicant_id, approver_id, application_type,
@@ -84,10 +96,13 @@
     </select>
 
     <select id="findPendingApplicationsByApprover" resultMap="FlowApplicationResultMap">
-        SELECT <include refid="ApplicationColumns"/>
-        FROM flow_application
-        WHERE approver_id = #{approverId} AND status = 'PENDING'
-        ORDER BY created_at, id
+        SELECT <include refid="ApplicationColumnsWithAlias"/>
+        FROM flow_application f
+        INNER JOIN approval_task t ON t.application_id = f.id
+        WHERE t.approver_id = #{approverId}
+          AND t.status = 'PENDING'
+          AND f.status = 'PENDING'
+        ORDER BY t.activated_at, t.id
     </select>
 
     <update id="updateApplicationStatusIfPending">
@@ -96,18 +111,98 @@
         WHERE id = #{id} AND status = 'PENDING'
     </update>
 
+    <update id="updateApplicationApproverIfPending">
+        UPDATE flow_application
+        SET approver_id = #{approverId}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <insert id="insertApprovalTask">
+        INSERT INTO approval_task (
+            application_id, approval_level, approver_id, approver_name, status, activated_at
+        ) VALUES (
+            #{applicationId}, #{approvalLevel}, #{approverId}, #{approverName}, #{status}, #{activatedAt}
+        )
+    </insert>
+
+    <select id="findPendingTaskByApplication" resultMap="ApprovalTaskRecordResultMap">
+        SELECT t.id AS task_id, t.application_id, t.approval_level, t.approver_id,
+               t.approver_name, t.status AS task_status, t.activated_at, t.processed_at
+        FROM approval_task t
+        WHERE t.application_id = #{applicationId} AND t.status = 'PENDING'
+        ORDER BY t.approval_level
+        LIMIT 1
+    </select>
+
+    <select id="findTaskByApplicationAndApprover" resultMap="ApprovalTaskRecordResultMap">
+        SELECT t.id AS task_id, t.application_id, t.approval_level, t.approver_id,
+               t.approver_name, t.status AS task_status, t.activated_at, t.processed_at
+        FROM approval_task t
+        WHERE t.application_id = #{applicationId} AND t.approver_id = #{approverId}
+        LIMIT 1
+    </select>
+
+    <select id="findNextWaitingTask" resultMap="ApprovalTaskRecordResultMap">
+        SELECT t.id AS task_id, t.application_id, t.approval_level, t.approver_id,
+               t.approver_name, t.status AS task_status, t.activated_at, t.processed_at
+        FROM approval_task t
+        WHERE t.application_id = #{applicationId}
+          AND t.approval_level &gt; #{approvalLevel}
+          AND t.status = 'WAITING'
+        ORDER BY t.approval_level
+        LIMIT 1
+    </select>
+
+    <select id="findTasksByApplication" resultMap="ApprovalTaskRecordResultMap">
+        SELECT t.id AS task_id, t.application_id, t.approval_level, t.approver_id,
+               t.approver_name, t.status AS task_status, r.action, r.comment,
+               t.activated_at, t.processed_at
+        FROM approval_task t
+        LEFT JOIN approval_record r ON r.task_id = t.id
+        WHERE t.application_id = #{applicationId}
+        ORDER BY t.approval_level
+    </select>
+
+    <update id="updateApprovalTaskStatusIfPending">
+        UPDATE approval_task
+        SET status = #{status}, processed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <update id="activateApprovalTaskIfWaiting">
+        UPDATE approval_task
+        SET status = 'PENDING', activated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'WAITING'
+    </update>
+
+    <update id="cancelWaitingTasks">
+        UPDATE approval_task
+        SET status = 'CANCELLED', processed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE application_id = #{applicationId} AND status = 'WAITING'
+    </update>
+
     <insert id="insertApprovalRecord">
-        INSERT INTO approval_record (application_id, approver_id, action, comment)
-        VALUES (#{applicationId}, #{approverId}, #{action}, #{comment})
+        INSERT INTO approval_record (
+            application_id, task_id, approval_level, approver_id, action, comment
+        ) VALUES (
+            #{applicationId}, #{taskId}, #{approvalLevel}, #{approverId}, #{action}, #{comment}
+        )
     </insert>
 
     <select id="findCompletedTasksByApprover" resultMap="ApprovalTaskRecordResultMap">
-        SELECT a.application_id, f.application_no, f.applicant_id, f.application_type,
-               a.action, a.comment, a.created_at AS processed_at
-        FROM approval_record a
-        INNER JOIN flow_application f ON f.id = a.application_id
-        WHERE a.approver_id = #{approverId}
-        ORDER BY a.created_at DESC, a.id DESC
+        SELECT t.id AS task_id, t.application_id, f.application_no, f.applicant_id,
+               f.application_type, t.approval_level, t.approver_id, t.approver_name,
+               t.status AS task_status, r.action, r.comment,
+               t.activated_at, t.processed_at
+        FROM approval_task t
+        INNER JOIN flow_application f ON f.id = t.application_id
+        INNER JOIN approval_record r ON r.task_id = t.id
+        WHERE t.approver_id = #{approverId}
+          AND t.status IN ('APPROVED', 'REJECTED')
+        ORDER BY t.processed_at DESC, t.id DESC
     </select>
 
     <select id="countApplications" resultType="long">

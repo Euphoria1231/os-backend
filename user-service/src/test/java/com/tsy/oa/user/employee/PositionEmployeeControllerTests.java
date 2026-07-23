@@ -126,6 +126,47 @@ class PositionEmployeeControllerTests {
                 .andExpect(jsonPath("$.code").value(40904));
     }
 
+    @Test
+    void returnsDirectAndDepartmentLeadersForApprovalRoute() throws Exception {
+        long departmentId = createDepartment("研发部");
+        long positionId = createPosition("JAVA_DEV", "Java开发工程师");
+        long applicantId = createEmployee(
+                "E001", "applicant", "Password123", departmentId, positionId
+        );
+        long directLeaderId = createEmployee(
+                "E002", "directLeader", "Password123", departmentId, positionId
+        );
+        long departmentLeaderId = createEmployee(
+                "E003", "departmentLeader", "Password123", departmentId, positionId
+        );
+        jdbcTemplate.update(
+                "UPDATE employee SET leader_id = ? WHERE id = ?",
+                directLeaderId,
+                applicantId
+        );
+        jdbcTemplate.update(
+                "UPDATE department SET leader_employee_id = ? WHERE id = ?",
+                departmentLeaderId,
+                departmentId
+        );
+        jdbcTemplate.update(
+                "UPDATE employee SET real_name = '直属领导' WHERE id = ?",
+                directLeaderId
+        );
+        jdbcTemplate.update(
+                "UPDATE employee SET real_name = '部门负责人' WHERE id = ?",
+                departmentLeaderId
+        );
+
+        mockMvc.perform(get("/internal/user/employees/{id}/approval-route", applicantId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applicantId").value(applicantId))
+                .andExpect(jsonPath("$.data.directLeaderId").value(directLeaderId))
+                .andExpect(jsonPath("$.data.directLeaderName").value("直属领导"))
+                .andExpect(jsonPath("$.data.departmentLeaderId").value(departmentLeaderId))
+                .andExpect(jsonPath("$.data.departmentLeaderName").value("部门负责人"));
+    }
+
     private long createDepartment(String name) throws Exception {
         String response = mockMvc.perform(post("/api/user/departments")
                         .contentType(MediaType.APPLICATION_JSON)
