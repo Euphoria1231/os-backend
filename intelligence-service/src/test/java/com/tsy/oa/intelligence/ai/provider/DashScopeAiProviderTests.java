@@ -31,7 +31,7 @@ class DashScopeAiProviderTests {
         provider.generate(new AiPrompt("OFFICE_QA", "question-1", "Hello world!"));
 
         AiHttpRequest request = capturedRequest.get();
-        assertThat(request.endpoint()).isEqualTo("https://api.vveai.com/chat/completions");
+        assertThat(request.endpoint()).isEqualTo("https://api.vveai.com/v1/chat/completions");
         assertThat(request.apiKey()).isEqualTo("test-api-key");
         assertThat(request.headers()).containsEntry("x-foo", "true");
         var requestBody = objectMapper.readTree(request.requestBody());
