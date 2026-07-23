@@ -27,6 +27,16 @@ spring:
         password: ${NACOS_PASSWORD:}
         namespace: ${NACOS_NAMESPACE:}
 
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+
+oa:
+  notification:
+    events:
+      enabled: ${PERSONAL_NOTIFICATION_EVENTS_ENABLED:true}
+      topic: ${PERSONAL_NOTIFICATION_EVENTS_TOPIC:oa-personal-notification-events}
+      consumer-group: ${PERSONAL_NOTIFICATION_EVENTS_CONSUMER_GROUP:notice-personal-notification-consumer}
+
 mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:

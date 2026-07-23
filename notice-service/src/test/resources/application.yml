@@ -22,3 +22,8 @@ mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+oa:
+  notification:
+    events:
+      enabled: false

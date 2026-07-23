@@ -1,5 +1,20 @@
+DROP TABLE IF EXISTS personal_notification;
 DROP TABLE IF EXISTS notice_read;
 DROP TABLE IF EXISTS notice;
+
+CREATE TABLE personal_notification (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recipient_employee_id BIGINT NOT NULL,
+    notification_type VARCHAR(50) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    content VARCHAR(1000) NOT NULL,
+    related_business_type VARCHAR(50) NOT NULL,
+    related_business_id BIGINT NOT NULL,
+    event_id VARCHAR(64) NOT NULL,
+    read_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_personal_notification_event UNIQUE (event_id)
+);
 
 CREATE TABLE notice (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

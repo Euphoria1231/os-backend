@@ -104,13 +104,19 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private boolean isAuthorized(HttpMethod method, String path, JwtClaims claims) {
-        if (AUTHENTICATED_PATHS.contains(path) || claims.roles().contains(SUPER_ADMIN_ROLE)) {
+        if (isAuthenticatedPath(path) || claims.roles().contains(SUPER_ADMIN_ROLE)) {
             return true;
         }
         if (method == null) {
             return false;
         }
         return claims.permissions().stream().anyMatch(permission -> matches(permission, method, path));
+    }
+
+    private boolean isAuthenticatedPath(String path) {
+        return AUTHENTICATED_PATHS.contains(path)
+                || path.equals("/api/notices/personal")
+                || path.startsWith("/api/notices/personal/");
     }
 
     private boolean matches(String authority, HttpMethod method, String path) {

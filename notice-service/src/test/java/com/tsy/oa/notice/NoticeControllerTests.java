@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.common.log.BusinessOperationLogger;
 import com.tsy.oa.common.log.OperationLogCommand;
+import com.tsy.oa.common.notification.PersonalNotificationEvent;
+import com.tsy.oa.notice.event.PersonalNotificationEventHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +23,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,11 +54,119 @@ class NoticeControllerTests {
     @Autowired
     private RecordedOperationLogs operationLogs;
 
+    @Autowired
+    private PersonalNotificationEventHandler notificationEventHandler;
+
     @BeforeEach
     void resetData() {
+        jdbcTemplate.update("DELETE FROM personal_notification");
         jdbcTemplate.update("DELETE FROM notice_read");
         jdbcTemplate.update("DELETE FROM notice");
         operationLogs.clear();
+    }
+
+    @Test
+    void listsOnlyCurrentEmployeesPersonalNotificationsAndKeepsUnreadCountsSeparate() throws Exception {
+        insertPersonalNotification("event-20", 20L, "新的审批待办", "申请 L202607240001 等待处理");
+        insertPersonalNotification("event-30", 30L, "申请已批准", "申请 L202607240002 已通过");
+        publishNotice();
+
+        mockMvc.perform(get("/api/notices/personal")
+                        .header(EMPLOYEE_HEADER, "20")
+                        .param("page", "1")
+                        .param("pageSize", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].eventId").value("event-20"))
+                .andExpect(jsonPath("$.data.items[0].title").value("新的审批待办"))
+                .andExpect(jsonPath("$.data.items[0].read").value(false))
+                .andExpect(jsonPath("$.data.total").value(1));
+
+        mockMvc.perform(get("/api/notices/personal/unread-count")
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(1));
+        mockMvc.perform(get("/api/notices/unread-count")
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(1));
+    }
+
+    @Test
+    void marksPersonalNotificationsReadWithoutCrossEmployeeAccess() throws Exception {
+        long firstId = insertPersonalNotification(
+                "event-20-1", 20L, "新的审批待办", "申请 L202607240001 等待处理"
+        );
+        insertPersonalNotification(
+                "event-20-2", 20L, "申请已批准", "申请 L202607240002 已通过"
+        );
+        long anotherEmployeesId = insertPersonalNotification(
+                "event-30-1", 30L, "考勤异常提醒", "今日上班打卡判定为迟到"
+        );
+
+        mockMvc.perform(put("/api/notices/personal/{id}/read", firstId)
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/notices/personal/{id}/read", anotherEmployeesId)
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40402));
+        mockMvc.perform(put("/api/notices/personal/read-all")
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/notices/personal/unread-count")
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(0));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM personal_notification "
+                        + "WHERE recipient_employee_id = ? AND read_at IS NULL",
+                Integer.class,
+                30L
+        ));
+    }
+
+    @Test
+    void consumesEachPersonalNotificationEventOnlyOnce() throws Exception {
+        PersonalNotificationEvent event = new PersonalNotificationEvent(
+                "flow-submit-1001",
+                20L,
+                PersonalNotificationEvent.NotificationType.APPROVAL_TASK,
+                "新的审批待办",
+                "申请 L202607240001 等待处理",
+                PersonalNotificationEvent.RelatedBusinessType.FLOW_APPLICATION,
+                1001L,
+                LocalDateTime.of(2026, 7, 24, 9, 30)
+        );
+
+        assertTrue(notificationEventHandler.handle(event));
+        assertFalse(notificationEventHandler.handle(event));
+
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM personal_notification WHERE event_id = ?",
+                Integer.class,
+                event.eventId()
+        ));
+        mockMvc.perform(get("/api/notices/personal")
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].eventId").value(event.eventId()))
+                .andExpect(jsonPath("$.data.items[0].createdAt").value("2026-07-24T09:30:00"));
+    }
+
+    @Test
+    void rejectsInvalidPersonalNotificationPagination() throws Exception {
+        mockMvc.perform(get("/api/notices/personal")
+                        .header(EMPLOYEE_HEADER, "20")
+                        .param("page", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40000));
+        mockMvc.perform(get("/api/notices/personal")
+                        .header(EMPLOYEE_HEADER, "20")
+                        .param("pageSize", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40000));
     }
 
     @Test
@@ -225,6 +338,29 @@ class NoticeControllerTests {
                 .getContentAsString();
         JsonNode body = objectMapper.readTree(response);
         return body.path("data").path("id").asLong();
+    }
+
+    private long insertPersonalNotification(
+            String eventId,
+            Long recipientEmployeeId,
+            String title,
+            String content
+    ) {
+        jdbcTemplate.update(
+                "INSERT INTO personal_notification "
+                        + "(recipient_employee_id, notification_type, title, content, "
+                        + "related_business_type, related_business_id, event_id, created_at) "
+                        + "VALUES (?, 'APPROVAL_TASK', ?, ?, 'FLOW_APPLICATION', 1001, ?, CURRENT_TIMESTAMP)",
+                recipientEmployeeId,
+                title,
+                content,
+                eventId
+        );
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM personal_notification WHERE event_id = ?",
+                Long.class,
+                eventId
+        );
     }
 
     private record NoticePayload(String title, String content) {

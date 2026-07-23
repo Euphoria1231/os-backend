@@ -101,6 +101,33 @@ class AuthenticationGlobalFilterTests {
     }
 
     @Test
+    void allowsAuthenticatedEmployeeToManageOwnPersonalNotificationsWithoutExtraPermission() {
+        AuthenticationGlobalFilter filter = filter(tokenId -> Mono.just(false));
+        String token = jwtTokenService.issueToken(
+                10L,
+                "zhangsan",
+                List.of("EMPLOYEE"),
+                List.of()
+        );
+        AtomicReference<ServerWebExchange> listed = new AtomicReference<>();
+        AtomicReference<ServerWebExchange> markedRead = new AtomicReference<>();
+
+        filter.filter(
+                exchange(HttpMethod.GET, "/api/notices/personal", "Bearer " + token),
+                capture(listed)
+        ).block();
+        filter.filter(
+                exchange(HttpMethod.PUT, "/api/notices/personal/42/read", "Bearer " + token),
+                capture(markedRead)
+        ).block();
+
+        assertNotNull(listed.get());
+        assertNotNull(markedRead.get());
+        assertEquals("10", listed.get().getRequest().getHeaders().getFirst("X-Employee-Id"));
+        assertEquals("10", markedRead.get().getRequest().getHeaders().getFirst("X-Employee-Id"));
+    }
+
+    @Test
     void rejectsBlacklistedOrUnauthorizedToken() throws Exception {
         String token = jwtTokenService.issueToken(
                 10L,
