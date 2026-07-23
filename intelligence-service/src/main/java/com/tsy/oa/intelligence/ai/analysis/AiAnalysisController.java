@@ -3,10 +3,12 @@ package com.tsy.oa.intelligence.ai.analysis;
 import com.tsy.oa.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/api/intelligence/ai")
 public class AiAnalysisController {
     private final ApprovalAnalysisService approvalService; private final AttendanceAnalysisService attendanceService;

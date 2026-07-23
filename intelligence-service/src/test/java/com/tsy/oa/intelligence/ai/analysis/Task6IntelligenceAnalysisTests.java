@@ -27,7 +27,7 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "家庭事务", LocalDateTime.now(), LocalDateTime.now()),
-                failingAiAnalysisService()
+                failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
         ApprovalAnalysisResponse response = service.analyze(99L, 10L, List.of("EMPLOYEE"));
@@ -45,7 +45,7 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
-                failingAiAnalysisService()
+                failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
         assertThatThrownBy(() -> service.analyze(99L, 30L, List.of("EMPLOYEE")))
@@ -59,14 +59,14 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
-                analysisService(AiCallStatus.SUCCESS, "可作为补充意见")
+                analysisService(AiCallStatus.SUCCESS, "可作为补充意见"), new AiPromptSanitizer()
         );
         assertThat(service.analyze(99L, 20L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
         assertThat(service.analyze(99L, 1L, List.of("SUPER_ADMIN")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
         ApprovalAnalysisService failed = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
-                analysisService(AiCallStatus.FAILED, "upstream failure")
+                analysisService(AiCallStatus.FAILED, "upstream failure"), new AiPromptSanitizer()
         );
         assertThat(failed.analyze(99L, 10L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.FAILED);
     }

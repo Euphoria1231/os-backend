@@ -47,12 +47,14 @@ CREATE TABLE IF NOT EXISTS ai_analysis_record (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '审计记录ID',
     request_type VARCHAR(64) NOT NULL COMMENT '请求类型',
     business_reference_id VARCHAR(128) NOT NULL COMMENT '业务关联ID',
+    initiator_employee_id BIGINT NULL COMMENT '发起智能分析的员工ID；历史无归属记录仅SUPER_ADMIN可查',
     status VARCHAR(16) NOT NULL COMMENT 'SUCCESS、DEGRADED或FAILED',
     duration_ms BIGINT NOT NULL COMMENT 'AI调用耗时毫秒',
     result_summary VARCHAR(500) NOT NULL COMMENT '必要结果摘要，不保存完整请求',
     audited_at DATETIME(3) NOT NULL COMMENT '审计时间',
     PRIMARY KEY (id),
     KEY idx_ai_analysis_business (request_type, business_reference_id),
+    KEY idx_ai_analysis_initiator_audited_at (initiator_employee_id, audited_at),
     KEY idx_ai_analysis_audited_at (audited_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='AI辅助分析调用审计记录';

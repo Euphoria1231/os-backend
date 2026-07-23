@@ -17,10 +17,13 @@ public class ApprovalAnalysisService {
     private static final String SUPER_ADMIN = "SUPER_ADMIN";
     private final ApplicationAnalysisSource source;
     private final AiAnalysisService aiAnalysisService;
+    private final AiPromptSanitizer promptSanitizer;
 
-    public ApprovalAnalysisService(ApplicationAnalysisSource source, AiAnalysisService aiAnalysisService) {
+    public ApprovalAnalysisService(ApplicationAnalysisSource source, AiAnalysisService aiAnalysisService,
+                                   AiPromptSanitizer promptSanitizer) {
         this.source = source;
         this.aiAnalysisService = aiAnalysisService;
+        this.promptSanitizer = promptSanitizer;
     }
 
     public ApprovalAnalysisResponse analyze(long applicationId, long employeeId, List<String> roles) {
@@ -38,7 +41,7 @@ public class ApprovalAnalysisService {
         AiAnalysisAuditResult analysis = aiAnalysisService.analyzeAndRecord(new AiAnalysisRequest(
                 "APPROVAL", String.valueOf(applicationId), employeeId,
                 "仅分析申请类型、状态、时间和原因：" + application.applicationType() + "；" + application.status()
-                        + "；" + application.createdAt() + "；" + application.reason()
+                        + "；" + application.createdAt() + "；" + promptSanitizer.sanitizeApprovalReason(application.reason())
         ));
         AiCallResult result = analysis.result();
         String advice = result.status().name().equals("SUCCESS") ? result.displayText()

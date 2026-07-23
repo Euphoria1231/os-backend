@@ -57,6 +57,11 @@ mysql.exe --default-character-set=utf8mb4 -u root -p < sql\oa_ai.sql
 mysql.exe --default-character-set=utf8mb4 -u root -p < sql\init_data.sql
 ```
 
+全新安装直接执行上述基础脚本，`sql/oa_ai.sql` 已包含 Task 6 智能分析审计表的
+`initiator_employee_id` 可空字段和查询索引。已有 `oa_ai` 数据库升级到 Task 6 时，基础脚本不应重复执行；
+应额外执行可重复运行的 `sql/migrations/V20260723_01__add_ai_analysis_record_initiator.sql`。该迁移保留
+历史记录的无归属 `NULL`，此类记录只允许 `SUPER_ADMIN` 查询。
+
 ## 配置本地环境
 
 本地开发默认使用以下地址，无需写入环境文件：
