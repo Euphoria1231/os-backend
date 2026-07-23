@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.user.log.mapper.OperationLogMapper">
+
+    <resultMap id="OperationLogResultMap" type="com.tsy.oa.user.log.model.BusinessOperationLog">
+        <id property="id" column="id"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="operatorName" column="operator_name"/>
+        <result property="serviceName" column="service_name"/>
+        <result property="businessModule" column="business_module"/>
+        <result property="operationType" column="operation_type"/>
+        <result property="targetType" column="target_type"/>
+        <result property="targetId" column="target_id"/>
+        <result property="summary" column="summary"/>
+        <result property="operationStatus" column="operation_status"/>
+        <result property="requestPath" column="request_path"/>
+        <result property="httpMethod" column="http_method"/>
+        <result property="clientIp" column="client_ip"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="operatedAt" column="operated_at"/>
+    </resultMap>
+
+    <sql id="OperationLogColumns">
+        id, operator_id, operator_name, service_name, business_module,
+        operation_type, target_type, target_id, summary, operation_status,
+        request_path, http_method, client_ip, error_message, operated_at
+    </sql>
+
+    <sql id="OperationLogFilters">
+        <where>
+            <if test="operatorId != null">
+                operator_id = #{operatorId}
+            </if>
+            <if test="operatorKeyword != null and operatorKeyword != ''">
+                AND (
+                    CAST(operator_id AS CHAR) LIKE CONCAT('%', #{operatorKeyword}, '%')
+                    OR operator_name LIKE CONCAT('%', #{operatorKeyword}, '%')
+                )
+            </if>
+            <if test="businessModule != null and businessModule != ''">
+                AND business_module = #{businessModule}
+            </if>
+            <if test="operationStatus != null and operationStatus != ''">
+                AND operation_status = #{operationStatus}
+            </if>
+            <if test="startTime != null">
+                AND operated_at &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND operated_at &lt;= #{endTime}
+            </if>
+        </where>
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO business_operation_log (
+            operator_id, operator_name, service_name, business_module,
+            operation_type, target_type, target_id, summary, operation_status,
+            request_path, http_method, client_ip, error_message
+        ) VALUES (
+            #{operatorId}, #{operatorName}, #{serviceName}, #{businessModule},
+            #{operationType}, #{targetType}, #{targetId}, #{summary}, #{operationStatus},
+            #{requestPath}, #{httpMethod}, #{clientIp}, #{errorMessage}
+        )
+    </insert>
+
+    <select id="findById" resultMap="OperationLogResultMap">
+        SELECT <include refid="OperationLogColumns"/>
+        FROM business_operation_log
+        WHERE id = #{id}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM business_operation_log
+        <include refid="OperationLogFilters"/>
+    </select>
+
+    <select id="findPage" resultMap="OperationLogResultMap">
+        SELECT <include refid="OperationLogColumns"/>
+        FROM business_operation_log
+        <include refid="OperationLogFilters"/>
+        ORDER BY operated_at DESC, id DESC
+        LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+</mapper>

@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS employee_role;
 DROP TABLE IF EXISTS sys_api_permission;
 DROP TABLE IF EXISTS sys_menu;
 DROP TABLE IF EXISTS sys_role;
+DROP TABLE IF EXISTS business_operation_log;
 DROP TABLE IF EXISTS employee;
 DROP TABLE IF EXISTS position;
 DROP TABLE IF EXISTS department;
@@ -47,6 +48,24 @@ CREATE TABLE employee (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_employee_no UNIQUE (employee_no),
     CONSTRAINT uk_employee_username UNIQUE (username)
+);
+
+CREATE TABLE business_operation_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    operator_id BIGINT NULL,
+    operator_name VARCHAR(100) NOT NULL,
+    service_name VARCHAR(50) NOT NULL,
+    business_module VARCHAR(50) NOT NULL,
+    operation_type VARCHAR(50) NOT NULL,
+    target_type VARCHAR(50) NULL,
+    target_id VARCHAR(100) NULL,
+    summary VARCHAR(500) NOT NULL,
+    operation_status VARCHAR(20) NOT NULL,
+    request_path VARCHAR(255) NOT NULL,
+    http_method VARCHAR(10) NOT NULL,
+    client_ip VARCHAR(64) NULL,
+    error_message VARCHAR(500) NULL,
+    operated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE sys_role (

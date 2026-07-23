@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthenticationGlobalFilterTests {
@@ -74,6 +75,29 @@ class AuthenticationGlobalFilterTests {
                 List.of("GET:/api/user/employees/**"),
                 forwardedExchange.getRequest().getHeaders().get("X-Permissions")
         );
+    }
+
+    @Test
+    void allowsAuthenticatedEmployeeToReadOwnOperationLogsWithoutExtraPermission() {
+        AuthenticationGlobalFilter filter = filter(tokenId -> Mono.just(false));
+        String token = jwtTokenService.issueToken(
+                10L,
+                "zhangsan",
+                List.of("EMPLOYEE"),
+                List.of()
+        );
+        MockServerWebExchange exchange = exchange(
+                HttpMethod.GET,
+                "/api/user/operation-logs/mine",
+                "Bearer " + token
+        );
+        AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();
+
+        filter.filter(exchange, capture(forwarded)).block();
+
+        assertNotNull(forwarded.get());
+        assertEquals("10", forwarded.get().getRequest().getHeaders().getFirst("X-Employee-Id"));
+        assertEquals(List.of("EMPLOYEE"), forwarded.get().getRequest().getHeaders().get("X-Roles"));
     }
 
     @Test

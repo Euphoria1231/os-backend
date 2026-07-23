@@ -39,7 +39,8 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     );
     private static final Set<String> AUTHENTICATED_PATHS = Set.of(
             "/api/user/auth/logout",
-            "/api/user/auth/me"
+            "/api/user/auth/me",
+            "/api/user/operation-logs/mine"
     );
 
     private final JwtTokenService jwtTokenService;
