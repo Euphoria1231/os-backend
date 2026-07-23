@@ -9,8 +9,19 @@
         <result property="clockInTime" column="clock_in_time"/>
         <result property="clockOutTime" column="clock_out_time"/>
         <result property="attendanceStatus" column="attendance_status"/>
+        <result property="originalAttendanceStatus" column="original_attendance_status"/>
+        <result property="makeupApplicationId" column="makeup_application_id"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="AttendanceMakeupUsageResultMap" type="com.tsy.oa.attendance.model.AttendanceMakeupUsage">
+        <id property="id" column="id"/>
+        <result property="applicationId" column="application_id"/>
+        <result property="attendanceRecordId" column="attendance_record_id"/>
+        <result property="employeeId" column="employee_id"/>
+        <result property="quotaMonth" column="quota_month"/>
+        <result property="createdAt" column="created_at"/>
     </resultMap>
 
     <resultMap id="AttendanceMakeupQuotaResultMap" type="com.tsy.oa.attendance.model.AttendanceMakeupQuota">
@@ -34,14 +45,25 @@
 
     <select id="findById" resultMap="AttendanceRecordResultMap">
         SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
-               attendance_status, created_at, updated_at
+               attendance_status, original_attendance_status, makeup_application_id,
+               created_at, updated_at
         FROM attendance_record
         WHERE id = #{id}
     </select>
 
+    <select id="findByIdForUpdate" resultMap="AttendanceRecordResultMap">
+        SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
+               attendance_status, original_attendance_status, makeup_application_id,
+               created_at, updated_at
+        FROM attendance_record
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
     <select id="findByEmployeeAndDate" resultMap="AttendanceRecordResultMap">
         SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
-               attendance_status, created_at, updated_at
+               attendance_status, original_attendance_status, makeup_application_id,
+               created_at, updated_at
         FROM attendance_record
         WHERE employee_id = #{employeeId} AND attendance_date = #{attendanceDate}
     </select>
@@ -54,7 +76,8 @@
 
     <select id="findByEmployeeAndDateRange" resultMap="AttendanceRecordResultMap">
         SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
-               attendance_status, created_at, updated_at
+               attendance_status, original_attendance_status, makeup_application_id,
+               created_at, updated_at
         FROM attendance_record
         WHERE employee_id = #{employeeId}
           AND attendance_date BETWEEN #{startDate} AND #{endDate}
@@ -79,4 +102,44 @@
         FROM attendance_makeup_quota
         WHERE employee_id = #{employeeId} AND quota_month = #{quotaMonth}
     </select>
+
+    <select id="findMakeupQuotaForUpdate" resultMap="AttendanceMakeupQuotaResultMap">
+        SELECT id, employee_id, quota_month, total_count, used_count,
+               assigned_by, created_at, updated_at
+        FROM attendance_makeup_quota
+        WHERE employee_id = #{employeeId} AND quota_month = #{quotaMonth}
+        FOR UPDATE
+    </select>
+
+    <update id="incrementMakeupQuotaUsedIfAvailable">
+        UPDATE attendance_makeup_quota
+        SET used_count = used_count + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE employee_id = #{employeeId}
+          AND quota_month = #{quotaMonth}
+          AND used_count &lt; total_count
+    </update>
+
+    <update id="markRecordMadeUpIfLate">
+        UPDATE attendance_record
+        SET original_attendance_status = attendance_status,
+            attendance_status = 'MAKEUP',
+            makeup_application_id = #{applicationId},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND attendance_status = 'LATE'
+    </update>
+
+    <select id="findMakeupUsageByApplicationId" resultMap="AttendanceMakeupUsageResultMap">
+        SELECT id, application_id, attendance_record_id, employee_id, quota_month, created_at
+        FROM attendance_makeup_usage
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <insert id="insertMakeupUsage" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO attendance_makeup_usage (
+            application_id, attendance_record_id, employee_id, quota_month
+        ) VALUES (
+            #{applicationId}, #{attendanceRecordId}, #{employeeId}, #{quotaMonth}
+        )
+    </insert>
 </mapper>

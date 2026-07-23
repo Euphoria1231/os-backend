@@ -11,6 +11,8 @@ public class AttendanceRecord {
     private LocalDateTime clockInTime;
     private LocalDateTime clockOutTime;
     private String attendanceStatus;
+    private String originalAttendanceStatus;
+    private Long makeupApplicationId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -26,6 +28,14 @@ public class AttendanceRecord {
     public void setClockOutTime(LocalDateTime clockOutTime) { this.clockOutTime = clockOutTime; }
     public String getAttendanceStatus() { return attendanceStatus; }
     public void setAttendanceStatus(String attendanceStatus) { this.attendanceStatus = attendanceStatus; }
+    public String getOriginalAttendanceStatus() { return originalAttendanceStatus; }
+    public void setOriginalAttendanceStatus(String originalAttendanceStatus) {
+        this.originalAttendanceStatus = originalAttendanceStatus;
+    }
+    public Long getMakeupApplicationId() { return makeupApplicationId; }
+    public void setMakeupApplicationId(Long makeupApplicationId) {
+        this.makeupApplicationId = makeupApplicationId;
+    }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

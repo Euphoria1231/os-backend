@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -58,6 +59,7 @@ class AttendanceControllerTests {
 
     @BeforeEach
     void resetData() {
+        jdbcTemplate.update("DELETE FROM attendance_makeup_usage");
         jdbcTemplate.update("DELETE FROM attendance_makeup_quota");
         jdbcTemplate.update("DELETE FROM attendance_record");
         redisGuard.clear();
@@ -326,6 +328,84 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void completesApprovedMakeupAndConsumesMonthlyQuota() throws Exception {
+        Long attendanceRecordId = insertLateRecordWithQuota(5, 0);
+
+        mockMvc.perform(post(
+                        "/internal/attendance/records/{recordId}/makeup-completion",
+                        attendanceRecordId
+                ).contentType("application/json")
+                        .content("{\"employeeId\":10,\"applicationId\":1001}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applicationId").value(1001))
+                .andExpect(jsonPath("$.data.attendanceRecordId").value(attendanceRecordId))
+                .andExpect(jsonPath("$.data.attendanceStatus").value("MAKEUP"))
+                .andExpect(jsonPath("$.data.originalAttendanceStatus").value("LATE"))
+                .andExpect(jsonPath("$.data.usedCount").value(1))
+                .andExpect(jsonPath("$.data.remainingCount").value(4));
+
+        assertEquals("MAKEUP", jdbcTemplate.queryForObject(
+                "SELECT attendance_status FROM attendance_record WHERE id = ?",
+                String.class,
+                attendanceRecordId
+        ));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT used_count FROM attendance_makeup_quota WHERE employee_id = ?",
+                Integer.class,
+                10L
+        ));
+    }
+
+    @Test
+    void treatsRepeatedMakeupCompletionAsIdempotent() throws Exception {
+        Long attendanceRecordId = insertLateRecordWithQuota(5, 0);
+        String requestBody = "{\"employeeId\":10,\"applicationId\":1001}";
+
+        mockMvc.perform(post(
+                        "/internal/attendance/records/{recordId}/makeup-completion",
+                        attendanceRecordId
+                ).contentType("application/json").content(requestBody))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(
+                        "/internal/attendance/records/{recordId}/makeup-completion",
+                        attendanceRecordId
+                ).contentType("application/json").content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.usedCount").value(1))
+                .andExpect(jsonPath("$.data.remainingCount").value(4));
+
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT used_count FROM attendance_makeup_quota WHERE employee_id = ?",
+                Integer.class,
+                10L
+        ));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_makeup_usage WHERE application_id = ?",
+                Integer.class,
+                1001L
+        ));
+    }
+
+    @Test
+    void rejectsMakeupCompletionWhenQuotaWasExhaustedBeforeApproval() throws Exception {
+        Long attendanceRecordId = insertLateRecordWithQuota(1, 1);
+
+        mockMvc.perform(post(
+                        "/internal/attendance/records/{recordId}/makeup-completion",
+                        attendanceRecordId
+                ).contentType("application/json")
+                        .content("{\"employeeId\":10,\"applicationId\":1001}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40906));
+
+        assertEquals("LATE", jdbcTemplate.queryForObject(
+                "SELECT attendance_status FROM attendance_record WHERE id = ?",
+                String.class,
+                attendanceRecordId
+        ));
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
@@ -335,6 +415,29 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.openapi").isNotEmpty())
                 .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
                 .andExpect(jsonPath("$.paths['/api/attendance/clock-in']").exists());
+    }
+
+    private Long insertLateRecordWithQuota(int totalCount, int usedCount) {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                10L,
+                LocalDate.of(2026, 7, 20),
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 5),
+                "LATE"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO attendance_makeup_quota "
+                        + "(employee_id, quota_month, total_count, used_count, assigned_by) "
+                        + "VALUES (?, ?, ?, ?, ?)",
+                10L, LocalDate.of(2026, 7, 1), totalCount, usedCount, 20L
+        );
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                10L
+        );
     }
 
     @SpringBootConfiguration

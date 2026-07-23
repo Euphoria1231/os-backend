@@ -2,14 +2,17 @@ package com.tsy.oa.attendance.service;
 
 import com.tsy.oa.attendance.config.AttendanceClockProperties;
 import com.tsy.oa.attendance.dto.AttendanceRecordResponse;
-import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
+import com.tsy.oa.attendance.dto.MakeupCompletionRequest;
+import com.tsy.oa.attendance.dto.MakeupCompletionResponse;
 import com.tsy.oa.attendance.dto.MakeupEligibilityResponse;
+import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
 import com.tsy.oa.attendance.dto.MakeupQuotaResponse;
 import com.tsy.oa.attendance.employee.EmployeeDirectory;
 import com.tsy.oa.attendance.error.AttendanceErrorCode;
 import com.tsy.oa.attendance.mapper.AttendanceMapper;
 import com.tsy.oa.attendance.model.AttendanceRecord;
 import com.tsy.oa.attendance.model.AttendanceMakeupQuota;
+import com.tsy.oa.attendance.model.AttendanceMakeupUsage;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
 import com.tsy.oa.common.error.CommonErrorCode;
@@ -185,6 +188,65 @@ public class AttendanceService {
             throw new BusinessException(AttendanceErrorCode.MAKEUP_QUOTA_UNAVAILABLE);
         }
         return MakeupEligibilityResponse.eligible(record, quota);
+    }
+
+    @Transactional
+    public MakeupCompletionResponse completeMakeup(
+            Long recordId,
+            MakeupCompletionRequest request
+    ) {
+        AttendanceRecord record = attendanceMapper.findByIdForUpdate(recordId);
+        if (record == null || !record.getEmployeeId().equals(request.employeeId())) {
+            throw new BusinessException(AttendanceErrorCode.RECORD_NOT_FOUND);
+        }
+
+        AttendanceMakeupUsage existingUsage = attendanceMapper
+                .findMakeupUsageByApplicationId(request.applicationId());
+        LocalDate quotaMonth = YearMonth.from(record.getAttendanceDate()).atDay(1);
+        if (existingUsage != null) {
+            if (!existingUsage.getAttendanceRecordId().equals(recordId)
+                    || !existingUsage.getEmployeeId().equals(request.employeeId())) {
+                throw new BusinessException(AttendanceErrorCode.MAKEUP_APPLICATION_CONFLICT);
+            }
+            return completedMakeupResponse(request.applicationId(), record, quotaMonth);
+        }
+
+        if (!"LATE".equals(record.getAttendanceStatus())) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_REQUIRES_LATE_RECORD);
+        }
+        AttendanceMakeupQuota quota = attendanceMapper.findMakeupQuotaForUpdate(
+                request.employeeId(), quotaMonth
+        );
+        if (quota == null || attendanceMapper.incrementMakeupQuotaUsedIfAvailable(
+                request.employeeId(), quotaMonth
+        ) == 0) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_QUOTA_UNAVAILABLE);
+        }
+        if (attendanceMapper.markRecordMadeUpIfLate(recordId, request.applicationId()) == 0) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_REQUIRES_LATE_RECORD);
+        }
+
+        AttendanceMakeupUsage usage = new AttendanceMakeupUsage();
+        usage.setApplicationId(request.applicationId());
+        usage.setAttendanceRecordId(recordId);
+        usage.setEmployeeId(request.employeeId());
+        usage.setQuotaMonth(quotaMonth);
+        attendanceMapper.insertMakeupUsage(usage);
+        return completedMakeupResponse(request.applicationId(), attendanceMapper.findById(recordId), quotaMonth);
+    }
+
+    private MakeupCompletionResponse completedMakeupResponse(
+            Long applicationId,
+            AttendanceRecord record,
+            LocalDate quotaMonth
+    ) {
+        AttendanceMakeupQuota quota = attendanceMapper.findMakeupQuota(
+                record.getEmployeeId(), quotaMonth
+        );
+        if (quota == null) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_QUOTA_UNAVAILABLE);
+        }
+        return MakeupCompletionResponse.from(applicationId, record, quota);
     }
 
     private LockToken acquireLock(Long employeeId, LocalDate date, String operation) {

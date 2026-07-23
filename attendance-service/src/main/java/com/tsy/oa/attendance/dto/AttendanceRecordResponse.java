@@ -12,13 +12,16 @@ public record AttendanceRecordResponse(
         LocalDateTime clockInTime,
         LocalDateTime clockOutTime,
         String attendanceStatus,
+        String originalAttendanceStatus,
+        Long makeupApplicationId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static AttendanceRecordResponse from(AttendanceRecord record) {
         return new AttendanceRecordResponse(
                 record.getId(), record.getEmployeeId(), record.getAttendanceDate(), record.getClockInTime(),
-                record.getClockOutTime(), record.getAttendanceStatus(), record.getCreatedAt(), record.getUpdatedAt()
+                record.getClockOutTime(), record.getAttendanceStatus(), record.getOriginalAttendanceStatus(),
+                record.getMakeupApplicationId(), record.getCreatedAt(), record.getUpdatedAt()
         );
     }
 }
