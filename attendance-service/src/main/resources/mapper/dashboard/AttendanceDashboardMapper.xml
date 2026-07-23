@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.attendance.dashboard.mapper.AttendanceDashboardMapper">
+
+    <resultMap id="DailyTrendResultMap" type="com.tsy.oa.attendance.dashboard.dto.AttendanceDailyTrendResponse">
+        <constructor>
+            <arg column="attendance_date" javaType="java.time.LocalDate"/>
+            <arg column="total_count" javaType="java.lang.Long"/>
+            <arg column="normal_count" javaType="java.lang.Long"/>
+            <arg column="late_count" javaType="java.lang.Long"/>
+            <arg column="early_leave_count" javaType="java.lang.Long"/>
+            <arg column="absent_count" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findDailyTrend" resultMap="DailyTrendResultMap">
+        SELECT attendance_date,
+               COUNT(*) AS total_count,
+               SUM(CASE WHEN attendance_status = 'NORMAL' THEN 1 ELSE 0 END) AS normal_count,
+               SUM(CASE WHEN attendance_status = 'LATE' THEN 1 ELSE 0 END) AS late_count,
+               SUM(CASE WHEN attendance_status = 'EARLY_LEAVE' THEN 1 ELSE 0 END) AS early_leave_count,
+               SUM(CASE WHEN attendance_status = 'ABSENT' THEN 1 ELSE 0 END) AS absent_count
+        FROM attendance_record
+        WHERE attendance_date &gt;= #{startDate}
+          AND attendance_date &lt; #{endDate}
+        GROUP BY attendance_date
+        ORDER BY attendance_date
+    </select>
+
+</mapper>

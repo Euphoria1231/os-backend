@@ -17,9 +17,23 @@ public class DashboardController {
     private static final String SUPER_ADMIN = "SUPER_ADMIN";
 
     private final OrganizationDashboardService organizationService;
+    private final AttendanceDashboardService attendanceService;
 
-    public DashboardController(OrganizationDashboardService organizationService) {
+    public DashboardController(
+            OrganizationDashboardService organizationService,
+            AttendanceDashboardService attendanceService
+    ) {
         this.organizationService = organizationService;
+        this.attendanceService = attendanceService;
+    }
+
+    @GetMapping("/attendance")
+    public ApiResponse<DashboardSectionResponse<AttendanceDashboardResponse>> attendance(
+            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
+            @org.springframework.web.bind.annotation.RequestParam String month
+    ) {
+        requireAdministrator(roles);
+        return ApiResponse.success(attendanceService.getAttendance(month));
     }
 
     @GetMapping("/organization")
