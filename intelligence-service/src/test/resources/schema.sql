@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS ai_analysis_record (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     request_type VARCHAR(64) NOT NULL,
     business_reference_id VARCHAR(128) NOT NULL,
-    initiator_employee_id BIGINT NOT NULL,
+    initiator_employee_id BIGINT,
     status VARCHAR(16) NOT NULL,
     duration_ms BIGINT NOT NULL,
     result_summary VARCHAR(500) NOT NULL,

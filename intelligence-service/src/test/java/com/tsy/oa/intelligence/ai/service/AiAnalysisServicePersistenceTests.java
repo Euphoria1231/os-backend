@@ -106,6 +106,20 @@ class AiAnalysisServicePersistenceTests {
         assertThat(found.getAuditedAt()).isEqualTo(java.time.LocalDateTime.of(2026, 7, 23, 9, 0));
     }
 
+    @Test
+    void hydratesLegacyRecordWithNullInitiatorThroughRealMyBatisMapper() {
+        jdbcTemplate.update("""
+                INSERT INTO ai_analysis_record (request_type, business_reference_id, initiator_employee_id, status,
+                duration_ms, result_summary, audited_at) VALUES (?, ?, NULL, ?, ?, ?, ?)
+                """, "APPROVAL", "legacy-99", "SUCCESS", 1L, "仅供参考：历史摘要",
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(2026, 7, 23, 10, 0)));
+        Long id = jdbcTemplate.queryForObject("SELECT id FROM ai_analysis_record WHERE business_reference_id = ?", Long.class, "legacy-99");
+
+        AiAnalysisRecord found = recordMapper.findById(id);
+
+        assertThat(found.getInitiatorEmployeeId()).isNull();
+    }
+
     @TestConfiguration
     static class TestBeans {
 

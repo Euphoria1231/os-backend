@@ -49,7 +49,9 @@ class Task6IntelligenceAnalysisTests {
         );
 
         assertThatThrownBy(() -> service.analyze(99L, 30L, List.of("EMPLOYEE")))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -120,6 +122,16 @@ class Task6IntelligenceAnalysisTests {
     }
 
     @Test
+    void officeQuestionAcceptsTrimmedFiveHundredCharactersAndRejectsFiveHundredOne() {
+        OfficeQuestionRequest accepted = new OfficeQuestionRequest(" " + "a".repeat(500) + " ");
+        assertThat(accepted.question()).hasSize(500);
+        assertThatThrownBy(() -> new OfficeQuestionRequest("a".repeat(501)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
     void feignApprovalSourceDistinguishesNotFoundFromUpstreamFailure() {
         ApplicationSearchSourceClient notFoundClient = applicationId -> ApiResponse.failure(CommonErrorCode.NOT_FOUND);
         ApplicationSearchSourceClient failedClient = applicationId -> ApiResponse.failure(CommonErrorCode.INTERNAL_SERVER_ERROR);
@@ -151,9 +163,47 @@ class Task6IntelligenceAnalysisTests {
         });
 
         assertThat(service.get(7L, 10L, List.of("EMPLOYEE")).resultSummary()).doesNotContain("Prompt", "Key");
-        assertThatThrownBy(() -> service.get(7L, 11L, List.of("EMPLOYEE"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.get(7L, 11L, List.of("EMPLOYEE")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
         assertThat(service.get(7L, 1L, List.of("SUPER_ADMIN")).id()).isEqualTo(7L);
-        assertThatThrownBy(() -> service.get(8L, 10L, List.of("EMPLOYEE"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.get(8L, 10L, List.of("EMPLOYEE")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void legacyUnattributedRecordIsSuperAdminOnly() {
+        AiAnalysisRecord legacy = AiAnalysisRecord.hydrate(8L, "APPROVAL", "100", null, "SUCCESS", 2L,
+                "仅供参考：历史受控摘要", LocalDateTime.now());
+        AiAnalysisRecordService service = new AiAnalysisRecordService(new com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper() {
+            @Override public int insert(AiAnalysisRecord record) { return 1; }
+            @Override public AiAnalysisRecord findById(long id) { return id == 8L ? legacy : null; }
+        });
+
+        assertThatThrownBy(() -> service.get(8L, 10L, List.of("EMPLOYEE")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
+        assertThat(service.get(8L, 1L, List.of("SUPER_ADMIN")).initiatorEmployeeId()).isNull();
+    }
+
+    @Test
+    void feignAttendanceSourceRejectsMissingOrInvalidUpstreamPayloadButAllowsEmptyMonth() {
+        AttendanceSourceClient nullResponse = (employeeId, startDate, endDate) -> null;
+        AttendanceSourceClient failedResponse = (employeeId, startDate, endDate) -> ApiResponse.failure(CommonErrorCode.INTERNAL_SERVER_ERROR);
+        AttendanceSourceClient nullData = (employeeId, startDate, endDate) -> new ApiResponse<>(0, "success", null);
+        AttendanceSourceClient emptyMonth = (employeeId, startDate, endDate) -> ApiResponse.success(List.of());
+
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullResponse).findRecords(1L, LocalDate.now(), LocalDate.now()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(failedResponse).findRecords(1L, LocalDate.now(), LocalDate.now()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullData).findRecords(1L, LocalDate.now(), LocalDate.now()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(new FeignAttendanceAnalysisSource(emptyMonth).findRecords(1L, LocalDate.now(), LocalDate.now())).isEmpty();
     }
 
     private AiAnalysisService failingAiAnalysisService() {

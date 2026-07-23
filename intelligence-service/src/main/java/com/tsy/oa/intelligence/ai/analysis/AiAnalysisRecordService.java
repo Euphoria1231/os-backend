@@ -14,10 +14,11 @@ public class AiAnalysisRecordService {
     public AiAnalysisRecordResponse get(long id, long requesterId, List<String> roles) {
         AiAnalysisRecord record = mapper.findById(id);
         if (record == null) throw new BusinessException(CommonErrorCode.NOT_FOUND);
-        if (record.getInitiatorEmployeeId() != requesterId && (roles == null || roles.stream().noneMatch("SUPER_ADMIN"::equals))) {
+        boolean administrator = roles != null && roles.stream().anyMatch("SUPER_ADMIN"::equals);
+        if (!administrator && (record.getInitiatorEmployeeId() == null || record.getInitiatorEmployeeId() != requesterId)) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
-        return new AiAnalysisRecordResponse(record.getId(), record.getRequestType(), record.getBusinessReferenceId(),
+        return new AiAnalysisRecordResponse(record.getId(), record.getRequestType(), record.getBusinessReferenceId(), record.getInitiatorEmployeeId(),
                 record.getStatus(), record.getDurationMs(), record.getResultSummary(), record.getAuditedAt());
     }
 }
