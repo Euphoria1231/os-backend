@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS attendance_record (
     attendance_date DATE NOT NULL COMMENT '考勤日期',
     clock_in_time DATETIME NULL COMMENT '上班打卡时间',
     clock_out_time DATETIME NULL COMMENT '下班打卡时间',
-    attendance_status VARCHAR(20) NOT NULL COMMENT '状态：NORMAL、LATE、MAKEUP',
+    attendance_status VARCHAR(20) NOT NULL COMMENT '状态：NORMAL、LATE、EARLY_LEAVE、MAKEUP',
     original_attendance_status VARCHAR(20) NULL COMMENT '补签前原始考勤状态',
     makeup_application_id BIGINT NULL COMMENT '审批通过的补签申请ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

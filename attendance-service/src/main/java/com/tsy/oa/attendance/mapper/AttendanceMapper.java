@@ -26,7 +26,8 @@ public interface AttendanceMapper {
 
     int updateClockOut(
             @Param("id") Long id,
-            @Param("clockOutTime") LocalDateTime clockOutTime
+            @Param("clockOutTime") LocalDateTime clockOutTime,
+            @Param("attendanceStatus") String attendanceStatus
     );
 
     List<AttendanceRecord> findByEmployeeAndDateRange(

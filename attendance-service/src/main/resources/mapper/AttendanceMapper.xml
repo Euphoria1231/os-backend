@@ -70,7 +70,9 @@
 
     <update id="updateClockOut">
         UPDATE attendance_record
-        SET clock_out_time = #{clockOutTime}, updated_at = CURRENT_TIMESTAMP
+        SET clock_out_time = #{clockOutTime},
+            attendance_status = #{attendanceStatus},
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>
 

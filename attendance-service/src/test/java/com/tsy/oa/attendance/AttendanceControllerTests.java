@@ -1,10 +1,12 @@
 package com.tsy.oa.attendance;
 
 import com.tsy.oa.attendance.employee.EmployeeDirectory;
+import com.tsy.oa.attendance.notification.PersonalNotificationPublisher;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
 import com.tsy.oa.common.log.BusinessOperationLogger;
 import com.tsy.oa.common.log.OperationLogCommand;
+import com.tsy.oa.common.notification.PersonalNotificationEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Set;
 import java.util.Map;
@@ -33,6 +36,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -66,6 +71,9 @@ class AttendanceControllerTests {
     @Autowired
     private RecordedOperationLogs operationLogs;
 
+    @Autowired
+    private RecordingPersonalNotificationPublisher notificationPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM attendance_makeup_usage");
@@ -74,6 +82,7 @@ class AttendanceControllerTests {
         redisGuard.clear();
         employeeDirectory.clear();
         operationLogs.clear();
+        notificationPublisher.clear();
         employeeDirectory.setLeader(10L, 20L);
         clock.setInstant(Instant.parse("2026-07-20T01:05:00Z"));
     }
@@ -159,6 +168,113 @@ class AttendanceControllerTests {
 
         assertEquals(1, operationLogs.count("CLOCK_IN", "SUCCESS"));
         assertEquals(1, operationLogs.count("CLOCK_OUT", "SUCCESS"));
+        Long recordId = recordId(10L);
+        assertEquals(List.of(
+                "attendance:" + recordId + ":late:10:ATTENDANCE_ABNORMAL"
+        ), notificationPublisher.summaries());
+    }
+
+    @Test
+    void marksClockOutBeforeWorkEndAsEarlyLeave() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("NORMAL"));
+
+        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("EARLY_LEAVE"));
+
+        Long recordId = recordId(10L);
+        assertEquals(List.of(
+                "attendance:" + recordId + ":early-leave:10:ATTENDANCE_ABNORMAL"
+        ), notificationPublisher.summaries());
+    }
+
+    @Test
+    void rollsBackLateClockInWhenNotificationPublishingFails() throws Exception {
+        notificationPublisher.failNext();
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(50000));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_record WHERE employee_id = ?",
+                Integer.class,
+                10L
+        ));
+        assertFalse(redisGuard.isCompleted(
+                10L, LocalDate.of(2026, 7, 20), "CLOCK_IN"
+        ));
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+    }
+
+    @Test
+    void doesNotNotifyForNormalClockInAndOut() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk());
+
+        clock.setInstant(Instant.parse("2026-07-20T10:00:00Z"));
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("NORMAL"));
+
+        assertEquals(List.of(), notificationPublisher.summaries());
+    }
+
+    @Test
+    void rollsBackEarlyClockOutWhenNotificationPublishingFails() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk());
+
+        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        notificationPublisher.failNext();
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(50000));
+
+        assertNull(jdbcTemplate.queryForObject(
+                "SELECT clock_out_time FROM attendance_record WHERE employee_id = ?",
+                LocalDateTime.class,
+                10L
+        ));
+        assertEquals("NORMAL", jdbcTemplate.queryForObject(
+                "SELECT attendance_status FROM attendance_record WHERE employee_id = ?",
+                String.class,
+                10L
+        ));
+        assertFalse(redisGuard.isCompleted(
+                10L, LocalDate.of(2026, 7, 20), "CLOCK_OUT"
+        ));
+
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("EARLY_LEAVE"));
+    }
+
+    @Test
+    void keepsLateStatusWhenClockOutIsAlsoEarly() throws Exception {
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+
+        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+
+        Long recordId = recordId(10L);
+        assertEquals(List.of(
+                "attendance:" + recordId + ":late:10:ATTENDANCE_ABNORMAL",
+                "attendance:" + recordId + ":early-leave:10:ATTENDANCE_ABNORMAL"
+        ), notificationPublisher.summaries());
     }
 
     @Test
@@ -546,6 +662,14 @@ class AttendanceControllerTests {
         );
     }
 
+    private Long recordId(Long employeeId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                employeeId
+        );
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.attendance")
@@ -585,6 +709,12 @@ class AttendanceControllerTests {
                     "attendance-service", logs::add, (command, exception) -> {
                     }
             );
+        }
+
+        @Bean
+        @Primary
+        RecordingPersonalNotificationPublisher recordingPersonalNotificationPublisher() {
+            return new RecordingPersonalNotificationPublisher();
         }
     }
 
@@ -695,6 +825,38 @@ class AttendanceControllerTests {
 
         void clear() {
             commands.clear();
+        }
+    }
+
+    static class RecordingPersonalNotificationPublisher implements PersonalNotificationPublisher {
+
+        private final List<PersonalNotificationEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private boolean failNext;
+
+        @Override
+        public void publish(PersonalNotificationEvent event) {
+            if (failNext) {
+                failNext = false;
+                throw new IllegalStateException("RocketMQ unavailable");
+            }
+            events.add(event);
+        }
+
+        List<String> summaries() {
+            return events.stream()
+                    .map(event -> event.eventId()
+                            + ":" + event.recipientEmployeeId()
+                            + ":" + event.notificationType())
+                    .toList();
+        }
+
+        void failNext() {
+            failNext = true;
+        }
+
+        void clear() {
+            events.clear();
+            failNext = false;
         }
     }
 }

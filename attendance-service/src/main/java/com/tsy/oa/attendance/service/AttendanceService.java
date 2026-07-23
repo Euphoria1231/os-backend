@@ -16,10 +16,12 @@ import com.tsy.oa.attendance.mapper.AttendanceMapper;
 import com.tsy.oa.attendance.model.AttendanceRecord;
 import com.tsy.oa.attendance.model.AttendanceMakeupQuota;
 import com.tsy.oa.attendance.model.AttendanceMakeupUsage;
+import com.tsy.oa.attendance.notification.PersonalNotificationPublisher;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.common.notification.PersonalNotificationEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +36,8 @@ public class AttendanceService {
 
     private static final String CLOCK_IN = "CLOCK_IN";
     private static final String CLOCK_OUT = "CLOCK_OUT";
+    private static final String LATE = "LATE";
+    private static final String EARLY_LEAVE = "EARLY_LEAVE";
 
     private final AttendanceMapper attendanceMapper;
     private final AttendanceRedisGuard redisGuard;
@@ -41,6 +45,7 @@ public class AttendanceService {
     private final AttendanceGeofenceProperties geofenceProperties;
     private final AttendanceGeofenceService geofenceService;
     private final EmployeeDirectory employeeDirectory;
+    private final PersonalNotificationPublisher notificationPublisher;
     private final Clock clock;
 
     public AttendanceService(
@@ -50,6 +55,7 @@ public class AttendanceService {
             AttendanceGeofenceProperties geofenceProperties,
             AttendanceGeofenceService geofenceService,
             EmployeeDirectory employeeDirectory,
+            PersonalNotificationPublisher notificationPublisher,
             Clock clock
     ) {
         this.attendanceMapper = attendanceMapper;
@@ -58,6 +64,7 @@ public class AttendanceService {
         this.geofenceProperties = geofenceProperties;
         this.geofenceService = geofenceService;
         this.employeeDirectory = employeeDirectory;
+        this.notificationPublisher = notificationPublisher;
         this.clock = clock;
     }
 
@@ -86,6 +93,11 @@ public class AttendanceService {
             record.setClockInTime(now);
             record.setAttendanceStatus(resolveClockInStatus(now));
             attendanceMapper.insert(record);
+            if (LATE.equals(record.getAttendanceStatus())) {
+                publishAttendanceAbnormal(
+                        record.getId(), employeeId, "late", "迟到", "上班", now
+                );
+            }
             redisGuard.markCompleted(
                     employeeId, date, CLOCK_IN, clockProperties.getCompletedMarkerTtl()
             );
@@ -116,7 +128,20 @@ public class AttendanceService {
             if (record.getClockOutTime() != null) {
                 throw new BusinessException(AttendanceErrorCode.ALREADY_CLOCKED_OUT);
             }
-            attendanceMapper.updateClockOut(record.getId(), now);
+            boolean earlyLeave = isEarlyLeave(now);
+            String clockOutStatus = resolveClockOutStatus(
+                    record.getAttendanceStatus(), earlyLeave
+            );
+            attendanceMapper.updateClockOut(
+                    record.getId(),
+                    now,
+                    clockOutStatus
+            );
+            if (earlyLeave) {
+                publishAttendanceAbnormal(
+                        record.getId(), employeeId, "early-leave", "早退", "下班", now
+                );
+            }
             redisGuard.markCompleted(
                     employeeId, date, CLOCK_OUT, clockProperties.getCompletedMarkerTtl()
             );
@@ -284,6 +309,36 @@ public class AttendanceService {
         boolean late = now.toLocalTime().isAfter(
                 clockProperties.getWorkStartTime().plusMinutes(clockProperties.getLateThresholdMinutes())
         );
-        return late ? "LATE" : "NORMAL";
+        return late ? LATE : "NORMAL";
+    }
+
+    private boolean isEarlyLeave(LocalDateTime now) {
+        return now.toLocalTime().isBefore(clockProperties.getWorkEndTime());
+    }
+
+    private String resolveClockOutStatus(String currentStatus, boolean earlyLeave) {
+        return earlyLeave && "NORMAL".equals(currentStatus)
+                ? EARLY_LEAVE
+                : currentStatus;
+    }
+
+    private void publishAttendanceAbnormal(
+            Long recordId,
+            Long employeeId,
+            String eventSuffix,
+            String abnormalLabel,
+            String clockType,
+            LocalDateTime occurredAt
+    ) {
+        notificationPublisher.publish(new PersonalNotificationEvent(
+                "attendance:" + recordId + ":" + eventSuffix,
+                employeeId,
+                PersonalNotificationEvent.NotificationType.ATTENDANCE_ABNORMAL,
+                "考勤异常提醒",
+                "您于 " + occurredAt + " " + clockType + "打卡，系统判定为" + abnormalLabel,
+                PersonalNotificationEvent.RelatedBusinessType.ATTENDANCE_RECORD,
+                recordId,
+                occurredAt
+        ));
     }
 }
