@@ -10,7 +10,9 @@ public enum AttendanceErrorCode implements ErrorCode {
     ALREADY_CLOCKED_OUT(40902, "今日已经完成下班打卡"),
     CLOCK_IN_REQUIRED(40903, "请先完成上班打卡"),
     OPERATION_BUSY(40904, "打卡操作处理中，请稍后重试"),
-    MAKEUP_QUOTA_BELOW_USED(40905, "补签总次数不能小于已使用次数");
+    MAKEUP_QUOTA_BELOW_USED(40905, "补签总次数不能小于已使用次数"),
+    MAKEUP_QUOTA_UNAVAILABLE(40906, "当月无可用补签次数"),
+    MAKEUP_REQUIRES_LATE_RECORD(42201, "只有迟到考勤记录可以申请补签");
 
     private final int code;
     private final String message;

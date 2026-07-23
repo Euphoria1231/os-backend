@@ -3,6 +3,7 @@ package com.tsy.oa.attendance.service;
 import com.tsy.oa.attendance.config.AttendanceClockProperties;
 import com.tsy.oa.attendance.dto.AttendanceRecordResponse;
 import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
+import com.tsy.oa.attendance.dto.MakeupEligibilityResponse;
 import com.tsy.oa.attendance.dto.MakeupQuotaResponse;
 import com.tsy.oa.attendance.employee.EmployeeDirectory;
 import com.tsy.oa.attendance.error.AttendanceErrorCode;
@@ -166,6 +167,24 @@ public class AttendanceService {
             throw new BusinessException(AttendanceErrorCode.RECORD_NOT_FOUND);
         }
         return MakeupQuotaResponse.from(quota);
+    }
+
+    @Transactional(readOnly = true)
+    public MakeupEligibilityResponse getMakeupEligibility(Long recordId, Long employeeId) {
+        AttendanceRecord record = attendanceMapper.findById(recordId);
+        if (record == null || !record.getEmployeeId().equals(employeeId)) {
+            throw new BusinessException(AttendanceErrorCode.RECORD_NOT_FOUND);
+        }
+        if (!"LATE".equals(record.getAttendanceStatus())) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_REQUIRES_LATE_RECORD);
+        }
+        AttendanceMakeupQuota quota = attendanceMapper.findMakeupQuota(
+                employeeId, YearMonth.from(record.getAttendanceDate()).atDay(1)
+        );
+        if (quota == null || quota.getTotalCount() <= quota.getUsedCount()) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_QUOTA_UNAVAILABLE);
+        }
+        return MakeupEligibilityResponse.eligible(record, quota);
     }
 
     private LockToken acquireLock(Long employeeId, LocalDate date, String operation) {

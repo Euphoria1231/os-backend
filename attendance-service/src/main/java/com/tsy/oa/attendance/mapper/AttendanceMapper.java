@@ -14,6 +14,8 @@ public interface AttendanceMapper {
 
     int insert(AttendanceRecord record);
 
+    AttendanceRecord findById(Long id);
+
     AttendanceRecord findByEmployeeAndDate(
             @Param("employeeId") Long employeeId,
             @Param("attendanceDate") LocalDate attendanceDate

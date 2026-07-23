@@ -32,6 +32,13 @@
         )
     </insert>
 
+    <select id="findById" resultMap="AttendanceRecordResultMap">
+        SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
+               attendance_status, created_at, updated_at
+        FROM attendance_record
+        WHERE id = #{id}
+    </select>
+
     <select id="findByEmployeeAndDate" resultMap="AttendanceRecordResultMap">
         SELECT id, employee_id, attendance_date, clock_in_time, clock_out_time,
                attendance_status, created_at, updated_at

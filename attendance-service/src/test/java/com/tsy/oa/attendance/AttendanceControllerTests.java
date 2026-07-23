@@ -182,6 +182,150 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void returnsMakeupEligibilityForLateRecordWithRemainingQuota() throws Exception {
+        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+        Long attendanceRecordId = jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                10L
+        );
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":5}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(
+                        "/internal/attendance/records/{recordId}/makeup-eligibility",
+                        attendanceRecordId
+                ).param("employeeId", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.eligible").value(true))
+                .andExpect(jsonPath("$.data.attendanceRecordId").value(attendanceRecordId))
+                .andExpect(jsonPath("$.data.employeeId").value(10))
+                .andExpect(jsonPath("$.data.attendanceDate").value("2026-07-20"))
+                .andExpect(jsonPath("$.data.remainingCount").value(5));
+    }
+
+    @Test
+    void rejectsMakeupEligibilityForAnotherEmployeesRecord() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                11L,
+                LocalDate.of(2026, 7, 20),
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 5),
+                "LATE"
+        );
+        Long attendanceRecordId = jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                11L
+        );
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":5}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(
+                        "/internal/attendance/records/{recordId}/makeup-eligibility",
+                        attendanceRecordId
+                ).param("employeeId", "10"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40401));
+    }
+
+    @Test
+    void rejectsMakeupEligibilityForNonLateRecord() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                10L,
+                LocalDate.of(2026, 7, 20),
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 0),
+                "NORMAL"
+        );
+        Long attendanceRecordId = jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                10L
+        );
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":5}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get(
+                        "/internal/attendance/records/{recordId}/makeup-eligibility",
+                        attendanceRecordId
+                ).param("employeeId", "10"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42201));
+    }
+
+    @Test
+    void rejectsMakeupEligibilityWhenMonthlyQuotaIsExhausted() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                10L,
+                LocalDate.of(2026, 7, 20),
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 5),
+                "LATE"
+        );
+        Long attendanceRecordId = jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                10L
+        );
+        jdbcTemplate.update(
+                "INSERT INTO attendance_makeup_quota "
+                        + "(employee_id, quota_month, total_count, used_count, assigned_by) "
+                        + "VALUES (?, ?, ?, ?, ?)",
+                10L, LocalDate.of(2026, 7, 1), 3, 3, 20L
+        );
+
+        mockMvc.perform(get(
+                        "/internal/attendance/records/{recordId}/makeup-eligibility",
+                        attendanceRecordId
+                ).param("employeeId", "10"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40906));
+    }
+
+    @Test
+    void rejectsMakeupEligibilityWhenMonthlyQuotaIsNotAssigned() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                10L,
+                LocalDate.of(2026, 7, 20),
+                java.time.LocalDateTime.of(2026, 7, 20, 9, 5),
+                "LATE"
+        );
+        Long attendanceRecordId = jdbcTemplate.queryForObject(
+                "SELECT id FROM attendance_record WHERE employee_id = ?",
+                Long.class,
+                10L
+        );
+
+        mockMvc.perform(get(
+                        "/internal/attendance/records/{recordId}/makeup-eligibility",
+                        attendanceRecordId
+                ).param("employeeId", "10"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40906));
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
