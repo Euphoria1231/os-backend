@@ -169,6 +169,13 @@
         ORDER BY t.approval_level
     </select>
 
+    <select id="findApproverIdsByApplication" resultType="long">
+        SELECT approver_id
+        FROM approval_task
+        WHERE application_id = #{applicationId}
+        ORDER BY approval_level
+    </select>
+
     <update id="updateApprovalTaskStatusIfPending">
         UPDATE approval_task
         SET status = #{status}, processed_at = CURRENT_TIMESTAMP,

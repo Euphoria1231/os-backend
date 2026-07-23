@@ -52,6 +52,8 @@ public interface FlowMapper {
 
     List<ApprovalTaskRecord> findTasksByApplication(Long applicationId);
 
+    List<Long> findApproverIdsByApplication(Long applicationId);
+
     int updateApprovalTaskStatusIfPending(
             @Param("id") Long id,
             @Param("status") String status

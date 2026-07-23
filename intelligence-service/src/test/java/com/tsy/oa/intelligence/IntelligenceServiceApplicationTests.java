@@ -109,7 +109,7 @@ class IntelligenceServiceApplicationTests {
     }
 
     @Test
-    void filtersApplicationsByOwnerTypeAndStatusAndReturnsEmptyPage() throws Exception {
+    void filtersApplicationsByOwnerOrApprovalParticipationAndReturnsEmptyPage() throws Exception {
         ELASTICSEARCH.setSearchResponse(
                 "{\"hits\":{\"total\":{\"value\":0,\"relation\":\"eq\"},\"hits\":[]}}"
         );
@@ -131,9 +131,15 @@ class IntelligenceServiceApplicationTests {
         org.assertj.core.api.Assertions.assertThat(employeeQuery.path("size").asInt()).isEqualTo(20);
         JsonNode employeeFilters = employeeQuery.path("query").path("bool").path("filter");
         org.assertj.core.api.Assertions.assertThat(employeeFilters).hasSize(3);
-        org.assertj.core.api.Assertions.assertThat(employeeFilters.get(0).path("term")).hasSize(1);
-        org.assertj.core.api.Assertions.assertThat(employeeFilters.get(0).path("term").path("applicantId").asLong())
+        JsonNode employeeOwnerScope = employeeFilters.get(0).path("bool");
+        JsonNode employeeOwnerTerms = employeeOwnerScope.path("should");
+        org.assertj.core.api.Assertions.assertThat(employeeOwnerTerms).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(employeeOwnerTerms.get(0).path("term").path("applicantId").asLong())
                 .isEqualTo(10L);
+        org.assertj.core.api.Assertions.assertThat(employeeOwnerTerms.get(1).path("term").path("approverIds").asLong())
+                .isEqualTo(10L);
+        org.assertj.core.api.Assertions.assertThat(employeeOwnerScope.path("minimum_should_match").asInt())
+                .isEqualTo(1);
         org.assertj.core.api.Assertions.assertThat(employeeFilters.get(1).path("term").path("type").asText())
                 .isEqualTo("LEAVE");
         org.assertj.core.api.Assertions.assertThat(employeeFilters.get(2).path("term").path("status").asText())
@@ -144,24 +150,24 @@ class IntelligenceServiceApplicationTests {
 
         mockMvc.perform(get("/api/intelligence/search/applications")
                         .header("X-Employee-Id", "2")
-                        .header("X-Roles", "DEPARTMENT_MANAGER")
+                        .header("X-Roles", "EMPLOYEE")
                         .param("keyword", "出差")
                         .param("page", "1")
                         .param("pageSize", "20"))
                 .andExpect(status().isOk());
-        JsonNode managerQuery = objectMapper.readTree(ELASTICSEARCH.lastSearchRequestBody());
-        JsonNode managerFilters = managerQuery.path("query").path("bool").path("filter");
-        org.assertj.core.api.Assertions.assertThat(managerFilters).hasSize(1);
-        JsonNode managerOwnerScope = managerFilters.get(0).path("bool");
-        JsonNode managerOwnerTerms = managerOwnerScope.path("should");
-        org.assertj.core.api.Assertions.assertThat(managerOwnerTerms).hasSize(2);
-        org.assertj.core.api.Assertions.assertThat(managerOwnerTerms.get(0).path("term")).hasSize(1);
-        org.assertj.core.api.Assertions.assertThat(managerOwnerTerms.get(0).path("term").path("applicantId").asLong())
+        JsonNode participantQuery = objectMapper.readTree(ELASTICSEARCH.lastSearchRequestBody());
+        JsonNode participantFilters = participantQuery.path("query").path("bool").path("filter");
+        org.assertj.core.api.Assertions.assertThat(participantFilters).hasSize(1);
+        JsonNode participantOwnerScope = participantFilters.get(0).path("bool");
+        JsonNode participantOwnerTerms = participantOwnerScope.path("should");
+        org.assertj.core.api.Assertions.assertThat(participantOwnerTerms).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(participantOwnerTerms.get(0).path("term")).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(participantOwnerTerms.get(0).path("term").path("applicantId").asLong())
                 .isEqualTo(2L);
-        org.assertj.core.api.Assertions.assertThat(managerOwnerTerms.get(1).path("term")).hasSize(1);
-        org.assertj.core.api.Assertions.assertThat(managerOwnerTerms.get(1).path("term").path("approverId").asLong())
+        org.assertj.core.api.Assertions.assertThat(participantOwnerTerms.get(1).path("term")).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(participantOwnerTerms.get(1).path("term").path("approverIds").asLong())
                 .isEqualTo(2L);
-        org.assertj.core.api.Assertions.assertThat(managerOwnerScope.path("minimum_should_match").asInt())
+        org.assertj.core.api.Assertions.assertThat(participantOwnerScope.path("minimum_should_match").asInt())
                 .isEqualTo(1);
 
         mockMvc.perform(get("/api/intelligence/search/applications")
@@ -228,7 +234,7 @@ class IntelligenceServiceApplicationTests {
         );
         ELASTICSEARCH.setApplicationSourceResponses("""
                 {"code":0,"message":"success","data":{"items":[
-                  {"id":3,"applicantId":10,"approverId":2,"applicationType":"LEAVE","status":"APPROVED","reason":"家庭事务","createdAt":"2026-07-22T08:00:00","updatedAt":"2026-07-22T11:00:00"}
+                  {"id":3,"applicantId":10,"approverId":4,"approverIds":[2,4],"applicationType":"LEAVE","status":"APPROVED","reason":"家庭事务","createdAt":"2026-07-22T08:00:00","updatedAt":"2026-07-22T11:00:00","searchVersion":3}
                 ],"total":1,"page":1,"pageSize":100,"hasNext":false}}
                 """);
         ELASTICSEARCH.seedDocument(
@@ -257,7 +263,8 @@ class IntelligenceServiceApplicationTests {
                 .anyMatch(request -> request.contains("page=2") && request.contains("pageSize=100"));
         org.assertj.core.api.Assertions.assertThat(ELASTICSEARCH.bulkRequests()).hasSize(3);
         org.assertj.core.api.Assertions.assertThat(ELASTICSEARCH.bulkRequests().get(2))
-                .contains("\"approverId\":2");
+                .contains("\"approverIds\":[2,4]")
+                .contains("\"sourceVersion\":3");
         String noticeTarget = ELASTICSEARCH.aliasTarget("oa-notices");
         String applicationTarget = ELASTICSEARCH.aliasTarget("oa-applications");
         org.assertj.core.api.Assertions.assertThat(noticeTarget)

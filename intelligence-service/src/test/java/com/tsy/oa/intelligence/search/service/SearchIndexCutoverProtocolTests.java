@@ -9,6 +9,7 @@ import com.tsy.oa.intelligence.search.event.persistence.SearchIndexCutoverBarrie
 import com.tsy.oa.intelligence.search.event.persistence.SearchIndexEventSequenceMapper;
 import com.tsy.oa.intelligence.search.event.persistence.SearchIndexReplayDelta;
 import com.tsy.oa.intelligence.search.event.source.SearchDocumentSourceGateway;
+import com.tsy.oa.intelligence.search.index.SearchIndexSchema;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
 import com.tsy.oa.intelligence.search.model.NoticeSearchDocument;
 import com.tsy.oa.intelligence.search.support.ElasticsearchStubServer;
@@ -146,7 +147,7 @@ class SearchIndexCutoverProtocolTests {
     void replaysCanonicalApplicationUpdateProcessedAfterSnapshotBeforeAliasCutover() throws Exception {
         ELASTICSEARCH.setApplicationSourceResponses("""
                 {"code":0,"message":"success","data":{"items":[
-                  {"id":15,"applicantId":3,"approverId":2,"applicationType":"LEAVE","status":"PENDING","reason":"病假申请","createdAt":"2026-07-22T08:30:00","updatedAt":"2026-07-22T08:30:00"}
+                  {"id":15,"applicantId":3,"approverId":2,"approverIds":[2],"applicationType":"LEAVE","status":"PENDING","reason":"病假申请","createdAt":"2026-07-22T08:30:00","updatedAt":"2026-07-22T08:30:00","searchVersion":1}
                 ],"total":1,"page":1,"pageSize":100,"hasNext":false}}
                 """);
         ApplicationSearchDocument approved = new ApplicationSearchDocument(
@@ -283,9 +284,9 @@ class SearchIndexCutoverProtocolTests {
         ELASTICSEARCH.seedIndexDefinition("oa-notices-v1", """
                 {"mappings":{"dynamic":"strict","properties":{"noticeId":{"type":"long"},"title":{"type":"text"},"content":{"type":"text"},"publishedAt":{"type":"date"},"status":{"type":"keyword"}}}}
                 """);
-        ELASTICSEARCH.seedIndexDefinition("oa-applications-v1", """
-                {"mappings":{"dynamic":"strict","properties":{"applicationId":{"type":"long"},"applicantId":{"type":"long"},"approverId":{"type":"long"},"type":{"type":"keyword"},"status":{"type":"keyword"},"reasonSummary":{"type":"text"},"submittedAt":{"type":"date"},"updatedAt":{"type":"date"}}}}
-                """);
+        ELASTICSEARCH.seedIndexDefinition(
+                "oa-applications-v1", SearchIndexSchema.APPLICATION_DEFINITION
+        );
         ELASTICSEARCH.attachAlias("oa-notices", "oa-notices-v1");
         ELASTICSEARCH.attachAlias("oa-applications", "oa-applications-v1");
     }

@@ -23,7 +23,7 @@ import java.util.Set;
 @Service
 public class SearchService {
 
-    private static final Set<String> APPLICATION_TYPES = Set.of("LEAVE", "OVERTIME");
+    private static final Set<String> APPLICATION_TYPES = Set.of("LEAVE", "OVERTIME", "MAKEUP");
     private static final Set<String> APPLICATION_STATUSES = Set.of("PENDING", "APPROVED", "REJECTED");
     private static final int ELASTICSEARCH_RESULT_WINDOW = 10_000;
 
@@ -78,8 +78,7 @@ public class SearchService {
             int page,
             int pageSize,
             long employeeId,
-            boolean administrator,
-            boolean departmentManager
+            boolean administrator
     ) {
         String normalizedType = normalizeFilter(type, APPLICATION_TYPES);
         String normalizedStatus = normalizeFilter(status, APPLICATION_STATUSES);
@@ -87,16 +86,14 @@ public class SearchService {
         ObjectNode bool = request.putObject("query").putObject("bool");
         addTextQuery(bool, keyword, List.of("reasonSummary"));
         ArrayNode filters = bool.putArray("filter");
-        if (departmentManager && !administrator) {
+        if (!administrator) {
             ObjectNode ownerScope = objectMapper.createObjectNode();
             ObjectNode ownerScopeBool = ownerScope.putObject("bool");
             ownerScopeBool.putArray("should")
                     .add(termQuery("applicantId", employeeId))
-                    .add(termQuery("approverId", employeeId));
+                    .add(termQuery("approverIds", employeeId));
             ownerScopeBool.put("minimum_should_match", 1);
             filters.add(ownerScope);
-        } else if (!administrator) {
-            filters.add(termQuery("applicantId", employeeId));
         }
         if (normalizedType != null) {
             filters.add(termQuery("type", normalizedType));

@@ -474,6 +474,24 @@ class FlowControllerTests {
     }
 
     @Test
+    void exposesAllApprovalParticipantsAndSearchVersionAfterFlowTransition() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/internal/flow/search-source/{id}", applicationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approverId").value(30))
+                .andExpect(jsonPath("$.data.approverIds[0]").value(20))
+                .andExpect(jsonPath("$.data.approverIds[1]").value(30))
+                .andExpect(jsonPath("$.data.searchVersion").value(2));
+    }
+
+    @Test
     void rejectsSearchSourceOffsetBeyondMapperRange() throws Exception {
         mockMvc.perform(get("/internal/flow/search-source")
                         .param("page", String.valueOf(Integer.MAX_VALUE))

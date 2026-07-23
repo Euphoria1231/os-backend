@@ -131,10 +131,15 @@ public class SearchIndexEventProcessor implements SearchIndexEventHandler {
             return;
         }
         ApplicationSearchDocument document = readDocument(event, ApplicationSearchDocument.class);
-        if (document == null || document.approverId() <= 0) {
+        if (document == null || document.approverId() <= 0
+                || document.approverIds() == null || document.approverIds().isEmpty()
+                || document.sourceVersion() <= 0) {
             document = sourceGateway.loadApplication(event.aggregateId());
         }
         document = documentNormalizer.normalizeApplication(document);
+        if (document.sourceVersion() < event.version()) {
+            throw new IllegalStateException("Application source version is older than event version");
+        }
         requireMatchingId(
                 document.applicationId(),
                 event.aggregateId(),

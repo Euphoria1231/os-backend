@@ -49,11 +49,13 @@ public class FeignSearchDocumentSourceGateway implements SearchDocumentSourceGat
                 requireMatchingId(source.id(), applicationId, "application"),
                 requireId(source.applicantId(), "application applicant"),
                 requireId(source.approverId(), "application approver"),
+                source.approverIds(),
                 source.applicationType(),
                 source.status(),
                 source.reason(),
                 source.createdAt(),
-                source.updatedAt()
+                source.updatedAt(),
+                requireId(source.searchVersion(), "application source version")
         ));
     }
 
@@ -93,11 +95,13 @@ public class FeignSearchDocumentSourceGateway implements SearchDocumentSourceGat
                     requireMatchingId(source.id(), applicationId, "application"),
                     requireId(source.applicantId(), "application applicant"),
                     requireId(source.approverId(), "application approver"),
+                    source.approverIds(),
                     source.applicationType(),
                     source.status(),
                     source.reason(),
                     source.createdAt(),
-                    source.updatedAt()
+                    source.updatedAt(),
+                    requireId(source.searchVersion(), "application source version")
             )));
         } catch (FeignException.NotFound exception) {
             return Optional.empty();

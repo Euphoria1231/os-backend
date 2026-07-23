@@ -58,7 +58,9 @@ class SearchIndexInitializerTests {
                 .contains("\"analyzer\":\"ik_max_word\"")
                 .contains("\"search_analyzer\":\"ik_smart\"")
                 .contains("\"applicationId\":{\"type\":\"long\"}")
-                .contains("\"approverId\":{\"type\":\"long\"}");
+                .contains("\"approverId\":{\"type\":\"long\"}")
+                .contains("\"approverIds\":{\"type\":\"long\"}")
+                .contains("\"sourceVersion\":{\"type\":\"long\"}");
     }
 
     @Test
@@ -93,6 +95,8 @@ class SearchIndexInitializerTests {
         assertThat(server.mappingRequests())
                 .anyMatch(request -> request.startsWith("oa-applications-v1\n")
                         && request.contains("\"approverId\"")
+                        && request.contains("\"approverIds\"")
+                        && request.contains("\"sourceVersion\"")
                         && request.contains("\"long\""));
         assertThat(server.aliasTarget("oa-notices")).isEqualTo("oa-notices-v1");
         assertThat(server.aliasTarget("oa-applications")).isEqualTo("oa-applications-v1");
@@ -106,6 +110,28 @@ class SearchIndexInitializerTests {
                 LocalDateTime.of(2026, 7, 22, 8, 30)
         ));
         assertThat(server.documents()).containsKey("/oa-applications-v1/_doc/application-15");
+    }
+
+    @Test
+    void migratesApplicationAccessMappingOnCurrentAliasTarget() throws Exception {
+        server.seedIndexDefinition("oa-notices-v1", SearchIndexSchema.NOTICE_DEFINITION);
+        server.seedIndexDefinition("oa-applications-v1", SearchIndexSchema.APPLICATION_DEFINITION);
+        server.seedIndexDefinition("oa-applications-rebuild-legacy", """
+                {"mappings":{"dynamic":"strict","properties":{"applicationId":{"type":"long"},"applicantId":{"type":"long"},"approverId":{"type":"long"},"type":{"type":"keyword"},"status":{"type":"keyword"},"reasonSummary":{"type":"text"},"submittedAt":{"type":"date"},"updatedAt":{"type":"date"}}}}
+                """);
+        server.attachAlias("oa-applications", "oa-applications-rebuild-legacy");
+
+        new SearchIndexInitializer(
+                new RestElasticsearchGateway(restClient, new ObjectMapper()),
+                properties
+        ).initialize();
+
+        assertThat(server.mappingRequests())
+                .anyMatch(request -> request.startsWith("oa-applications-rebuild-legacy\n")
+                        && request.contains("\"approverIds\"")
+                        && request.contains("\"sourceVersion\""));
+        assertThat(server.aliasTarget("oa-applications"))
+                .isEqualTo("oa-applications-rebuild-legacy");
     }
 
     @Test

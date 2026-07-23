@@ -169,7 +169,9 @@ public class SearchIndexAdministrationService {
                     noticeTarget, "status", "keyword"
             );
             boolean applicationSchemaReady = applicationExists && gateway.fieldMappingMatches(
-                    applicationTarget, "approverId", "long"
+                    applicationTarget, "approverIds", "long"
+            ) && gateway.fieldMappingMatches(
+                    applicationTarget, "sourceVersion", "long"
             );
             return new IndexHealthResponse(
                     true,
@@ -214,8 +216,10 @@ public class SearchIndexAdministrationService {
                 requireId(source.id(), "application"),
                 requireId(source.applicantId(), "application applicant"),
                 requireId(source.approverId(), "application approver"),
+                source.approverIds(),
                 source.applicationType(), source.status(), source.reason(),
-                source.createdAt(), source.updatedAt()
+                source.createdAt(), source.updatedAt(),
+                requireId(source.searchVersion(), "application source version")
         ));
     }
 

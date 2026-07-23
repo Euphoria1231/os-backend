@@ -133,7 +133,7 @@ public class FlowService {
 
     @Transactional(readOnly = true)
     public ApplicationSearchSourceResponse getSearchSource(Long applicationId) {
-        return ApplicationSearchSourceResponse.from(requireApplication(applicationId));
+        return toSearchSource(requireApplication(applicationId));
     }
 
     @Transactional(readOnly = true)
@@ -143,7 +143,7 @@ public class FlowService {
         List<ApplicationSearchSourceResponse> items = flowMapper
                 .findApplicationPage(offset, pageSize)
                 .stream()
-                .map(ApplicationSearchSourceResponse::from)
+                .map(this::toSearchSource)
                 .toList();
         return new ApplicationSearchSourcePageResponse(
                 items, total, page, pageSize, (long) page * pageSize < total
@@ -420,6 +420,13 @@ public class FlowService {
             throw new BusinessException(FlowErrorCode.APPLICATION_NOT_FOUND);
         }
         return application;
+    }
+
+    private ApplicationSearchSourceResponse toSearchSource(FlowApplication application) {
+        return ApplicationSearchSourceResponse.from(
+                application,
+                flowMapper.findApproverIdsByApplication(application.getId())
+        );
     }
 
     private String generateApplicationNo(String applicationType) {

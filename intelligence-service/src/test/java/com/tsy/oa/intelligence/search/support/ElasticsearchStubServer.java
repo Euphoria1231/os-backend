@@ -408,7 +408,10 @@ public final class ElasticsearchStubServer implements AutoCloseable {
     private String mappedProperties(String indexName) throws IOException {
         com.fasterxml.jackson.databind.node.ObjectNode properties = objectMapper.createObjectNode();
         for (String field : mappedFields.getOrDefault(indexName, Set.of())) {
-            properties.putObject(field).put("type", "approverId".equals(field) ? "long" : "keyword");
+            boolean longField = "approverId".equals(field)
+                    || "approverIds".equals(field)
+                    || "sourceVersion".equals(field);
+            properties.putObject(field).put("type", longField ? "long" : "keyword");
         }
         return objectMapper.writeValueAsString(properties);
     }

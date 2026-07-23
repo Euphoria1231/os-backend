@@ -32,7 +32,6 @@ import java.util.List;
 public class SearchController {
 
     private static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
-    private static final String DEPARTMENT_MANAGER_ROLE = "DEPARTMENT_MANAGER";
 
     private final SearchService searchService;
     private final SearchIndexAdministrationService administrationService;
@@ -69,7 +68,7 @@ public class SearchController {
     ) {
         return ApiResponse.success(searchService.searchApplications(
                 keyword, type, status, page, pageSize, employeeId,
-                isAdministrator(roles), hasRole(roles, DEPARTMENT_MANAGER_ROLE)
+                isAdministrator(roles)
         ));
     }
 

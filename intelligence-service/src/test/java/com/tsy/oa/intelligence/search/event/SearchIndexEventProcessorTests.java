@@ -23,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -141,6 +142,64 @@ class SearchIndexEventProcessorTests {
         assertThat(processor.process(event)).isEqualTo(SearchEventProcessingResult.PROCESSED);
         assertThat(sourceGateway.applicationLoadCount).isEqualTo(1);
         assertThat(repository.applications.get(15L)).isEqualTo(sourceDocument);
+    }
+
+    @Test
+    void olderApplicationSourceVersionRollsBackEventClaimForRocketMqRetry() {
+        ApplicationSearchDocument sourceDocument = new ApplicationSearchDocument(
+                15L,
+                3L,
+                4L,
+                List.of(2L, 4L),
+                "LEAVE",
+                "PENDING",
+                "身体不适",
+                LocalDateTime.of(2026, 7, 22, 8, 30),
+                LocalDateTime.of(2026, 7, 22, 9, 0),
+                1L
+        );
+        sourceGateway.applications.put(15L, sourceDocument);
+        SearchIndexEvent event = new SearchIndexEvent(
+                "application-event-2",
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                15L,
+                2L,
+                null
+        );
+
+        assertThatThrownBy(() -> processor.process(event))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("older than event");
+        assertThat(repository.applications).doesNotContainKey(15L);
+        assertThat(eventCount("application-event-2")).isZero();
+    }
+
+    @Test
+    void makeupApplicationCanBeIndexed() throws Exception {
+        ApplicationSearchDocument document = new ApplicationSearchDocument(
+                16L,
+                3L,
+                4L,
+                List.of(2L, 4L),
+                "MAKEUP",
+                "PENDING",
+                "补签申请",
+                LocalDateTime.of(2026, 7, 22, 8, 30),
+                LocalDateTime.of(2026, 7, 22, 8, 30),
+                1L
+        );
+        SearchIndexEvent event = new SearchIndexEvent(
+                "application-makeup-1",
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                16L,
+                1L,
+                objectMapper.valueToTree(document)
+        );
+
+        assertThat(processor.process(event)).isEqualTo(SearchEventProcessingResult.PROCESSED);
+        assertThat(repository.applications.get(16L).type()).isEqualTo("MAKEUP");
     }
 
     @Test

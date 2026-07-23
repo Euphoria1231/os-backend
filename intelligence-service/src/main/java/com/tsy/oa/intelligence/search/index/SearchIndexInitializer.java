@@ -43,9 +43,9 @@ public class SearchIndexInitializer implements ApplicationRunner {
             verifyRequiredAnalyzers();
             createIndexIfMissing(properties.getNoticeIndex(), SearchIndexSchema.NOTICE_DEFINITION);
             createIndexIfMissing(properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_DEFINITION);
-            migrateApplicationMapping();
             attachAliasIfMissing(properties.getNoticeAlias(), properties.getNoticeIndex());
             attachAliasIfMissing(properties.getApplicationAlias(), properties.getApplicationIndex());
+            migrateApplicationMappings();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize Elasticsearch search indexes", exception);
         }
@@ -68,19 +68,28 @@ public class SearchIndexInitializer implements ApplicationRunner {
         }
     }
 
-    private void migrateApplicationMapping() throws IOException {
-        if (!gateway.fieldMappingMatches(
-                properties.getApplicationIndex(), "approverId", "long"
-        )) {
+    private void migrateApplicationMappings() throws IOException {
+        migrateApplicationMapping(properties.getApplicationIndex());
+        String servingIndex = gateway.aliasTarget(properties.getApplicationAlias());
+        if (servingIndex != null && !servingIndex.equals(properties.getApplicationIndex())) {
+            migrateApplicationMapping(servingIndex);
+        }
+    }
+
+    private void migrateApplicationMapping(String indexName) throws IOException {
+        if (!applicationAccessMappingReady(indexName)) {
             gateway.updateMapping(
-                    properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_APPROVER_MAPPING
+                    indexName, SearchIndexSchema.APPLICATION_APPROVER_MAPPING
             );
         }
-        if (!gateway.fieldMappingMatches(
-                properties.getApplicationIndex(), "approverId", "long"
-        )) {
+        if (!applicationAccessMappingReady(indexName)) {
             throw new IllegalStateException("Application search index mapping is not ready");
         }
+    }
+
+    private boolean applicationAccessMappingReady(String indexName) throws IOException {
+        return gateway.fieldMappingMatches(indexName, "approverIds", "long")
+                && gateway.fieldMappingMatches(indexName, "sourceVersion", "long");
     }
 
     private void attachAliasIfMissing(String aliasName, String initialIndex) throws IOException {
