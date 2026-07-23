@@ -11,6 +11,7 @@ import com.tsy.oa.flow.service.FlowService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -24,6 +25,8 @@ import java.util.List;
 public class ApplicationController {
 
     private static final String EMPLOYEE_HEADER = "X-Employee-Id";
+    private static final String ROLES_HEADER = "X-Roles";
+    private static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
 
     private final FlowService flowService;
     private final BusinessOperationLogger operationLogger;
@@ -86,6 +89,19 @@ public class ApplicationController {
             @RequestHeader(EMPLOYEE_HEADER) Long employeeId
     ) {
         return ApiResponse.success(flowService.listMyApplications(employeeId));
+    }
+
+    @GetMapping("/{applicationId}")
+    public ApiResponse<FlowApplicationResponse> detail(
+            @PathVariable Long applicationId,
+            @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
+            @RequestHeader(value = ROLES_HEADER, defaultValue = "") List<String> roles
+    ) {
+        return ApiResponse.success(flowService.getApplicationDetail(
+                applicationId,
+                employeeId,
+                roles.contains(SUPER_ADMIN_ROLE)
+        ));
     }
 
     private FlowApplicationResponse submit(

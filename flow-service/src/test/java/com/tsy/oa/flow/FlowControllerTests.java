@@ -142,6 +142,40 @@ class FlowControllerTests {
     }
 
     @Test
+    void exposesApplicationDetailToApplicantAndAllActualApprovalParticipants() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        for (long employeeId : List.of(10L, 20L, 30L)) {
+            mockMvc.perform(get("/api/flow/applications/{id}", applicationId)
+                            .header(EMPLOYEE_HEADER, employeeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.id").value(applicationId))
+                    .andExpect(jsonPath("$.data.approvalProgress.length()").value(2));
+        }
+    }
+
+    @Test
+    void exposesApplicationDetailToSuperAdmin() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        mockMvc.perform(get("/api/flow/applications/{id}", applicationId)
+                        .header(EMPLOYEE_HEADER, "99")
+                        .header("X-Roles", "SUPER_ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(applicationId));
+    }
+
+    @Test
+    void rejectsApplicationDetailForUnrelatedEmployee() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        mockMvc.perform(get("/api/flow/applications/{id}", applicationId)
+                        .header(EMPLOYEE_HEADER, "40"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40300));
+    }
+
+    @Test
     void publishesVersionedSearchIndexEventsAcrossTwoLevelApproval() throws Exception {
         long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
 

@@ -118,6 +118,22 @@ public class FlowService {
     }
 
     @Transactional(readOnly = true)
+    public FlowApplicationResponse getApplicationDetail(
+            Long applicationId,
+            Long employeeId,
+            boolean administrator
+    ) {
+        FlowApplication application = requireApplication(applicationId);
+        boolean applicant = application.getApplicantId().equals(employeeId);
+        boolean approvalParticipant = !applicant
+                && flowMapper.findTaskByApplicationAndApprover(applicationId, employeeId) != null;
+        if (!administrator && !applicant && !approvalParticipant) {
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
+        return toResponse(application);
+    }
+
+    @Transactional(readOnly = true)
     public List<FlowApplicationResponse> listTodo(Long approverId) {
         return flowMapper.findPendingApplicationsByApprover(approverId).stream()
                 .map(this::toResponse)
