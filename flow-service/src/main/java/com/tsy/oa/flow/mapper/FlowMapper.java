@@ -1,10 +1,14 @@
 package com.tsy.oa.flow.mapper;
 
+import com.tsy.oa.flow.dashboard.dto.ApprovalDailyTrendResponse;
+import com.tsy.oa.flow.dashboard.dto.ApprovalStatusCountsResponse;
+import com.tsy.oa.flow.dashboard.dto.ApprovalTypeDistributionResponse;
 import com.tsy.oa.flow.model.ApprovalTaskRecord;
 import com.tsy.oa.flow.model.FlowApplication;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -34,5 +38,20 @@ public interface FlowMapper {
     List<FlowApplication> findApplicationPage(
             @Param("offset") int offset,
             @Param("pageSize") int pageSize
+    );
+
+    ApprovalStatusCountsResponse countDashboardStatuses(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
+    List<ApprovalTypeDistributionResponse> findDashboardTypeDistribution(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
+    List<ApprovalDailyTrendResponse> findDashboardDailyTrend(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
     );
 }

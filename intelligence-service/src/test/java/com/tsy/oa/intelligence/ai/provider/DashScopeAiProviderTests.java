@@ -7,12 +7,38 @@ import com.tsy.oa.intelligence.ai.model.AiPrompt;
 import org.junit.jupiter.api.Test;
 
 import java.net.http.HttpTimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DashScopeAiProviderTests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void openAiCompatibleRequestUsesVveaiDefaultsAndCustomHeader() throws Exception {
+        AiProperties properties = new AiProperties();
+        properties.setApiKey("test-api-key");
+        AtomicReference<AiHttpRequest> capturedRequest = new AtomicReference<>();
+        DashScopeAiProvider provider = new DashScopeAiProvider(properties, objectMapper, request -> {
+            capturedRequest.set(request);
+            return new AiHttpResponse(
+                    200,
+                    "{\"choices\":[{\"message\":{\"content\":\"Hello there!\"}}]}"
+            );
+        });
+
+        provider.generate(new AiPrompt("OFFICE_QA", "question-1", "Hello world!"));
+
+        AiHttpRequest request = capturedRequest.get();
+        assertThat(request.endpoint()).isEqualTo("https://api.vveai.com/chat/completions");
+        assertThat(request.apiKey()).isEqualTo("test-api-key");
+        assertThat(request.headers()).containsEntry("x-foo", "true");
+        var requestBody = objectMapper.readTree(request.requestBody());
+        assertThat(requestBody.path("model").asText()).isEqualTo("gemini-3.5-flash-lite");
+        assertThat(requestBody.path("messages").path(0).path("role").asText()).isEqualTo("user");
+        assertThat(requestBody.path("messages").path(0).path("content").asText()).isEqualTo("Hello world!");
+    }
 
     @Test
     void successfulResponseExtractsModelTextAndMarksItAsReferenceOnly() {

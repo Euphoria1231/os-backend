@@ -13,6 +13,7 @@ public interface EmployeeMapper {
     Employee findById(Long id);
     Employee findByUsername(String username);
     List<Employee> findAll();
+    List<Employee> findByLeaderId(Long leaderId);
     int update(Employee employee);
     int deleteById(Long id);
     int countByEmployeeNo(@Param("employeeNo") String employeeNo, @Param("excludeId") Long excludeId);

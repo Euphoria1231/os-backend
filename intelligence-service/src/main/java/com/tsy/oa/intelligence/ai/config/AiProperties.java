@@ -7,7 +7,7 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "oa.ai")
 public class AiProperties {
 
-    private String endpoint = "https://api.vveai.com/v1/chat/completions";
+    private String endpoint = "https://api.vveai.com/chat/completions";
     private String model = "gemini-3.5-flash-lite";
     private String apiKey = "";
     private Duration timeout = Duration.ofSeconds(10);

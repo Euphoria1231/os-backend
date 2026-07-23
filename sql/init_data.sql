@@ -1,3 +1,4 @@
+-- Active: 1784102221766@@127.0.0.1@3306@oa_user
 -- Demo accounts all use password: Oa@123456
 -- The database stores only the BCrypt hash generated with cost factor 10.
 
@@ -12,7 +13,7 @@ ON DUPLICATE KEY UPDATE
     sort_order = incoming.sort_order,
     status = incoming.status;
 
-INSERT INTO position (id, code, name, description, status)
+INSERT INTO `position` (id, code, name, description, status)
 VALUES (1, 'SYSTEM_ADMIN', '系统管理员', '负责系统配置与权限管理', 1),
        (2, 'DEPARTMENT_MANAGER', '部门主管', '负责团队管理与一级审批', 1),
        (3, 'JAVA_ENGINEER', 'Java 开发工程师', '负责企业应用研发', 1) AS incoming
@@ -91,7 +92,11 @@ VALUES (1, 'USER_READ', '查询用户与权限数据', 'GET', '/api/user/**', 1)
        (12, 'NOTICE_MARK_READ', '标记公告已读', 'PUT', '/api/notices/*/read', 1),
        (13, 'NOTICE_PUBLISH', '发布公告', 'POST', '/api/notices', 1),
        (14, 'INTELLIGENCE_SEARCH_READ', '使用全文检索',
-        'GET', '/api/intelligence/search/**', 1) AS incoming
+        'GET', '/api/intelligence/search/**', 1),
+       (15, 'USER_DIRECT_REPORT_READ', '查询直属员工',
+        'GET', '/api/user/employees/direct-reports', 1),
+       (16, 'ATTENDANCE_MAKEUP_QUOTA_ASSIGN', '配置直属员工补签额度',
+        'PUT', '/api/attendance/makeup-quotas/**', 1) AS incoming
 ON DUPLICATE KEY UPDATE
     name = incoming.name,
     http_method = incoming.http_method,
@@ -121,8 +126,10 @@ WHERE role_id = 2
 INSERT INTO role_api_permission (role_id, api_permission_id)
 VALUES (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7),
        (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13),
+       (1, 15), (1, 16),
        (2, 5), (2, 6), (2, 7), (2, 8), (2, 11), (2, 12), (2, 14),
-       (3, 5), (3, 6), (3, 7), (3, 8), (3, 9), (3, 10), (3, 11), (3, 12), (3, 14) AS incoming
+       (3, 5), (3, 6), (3, 7), (3, 8), (3, 9), (3, 10), (3, 11), (3, 12), (3, 14),
+       (3, 15), (3, 16) AS incoming
 ON DUPLICATE KEY UPDATE
     role_id = incoming.role_id;
 

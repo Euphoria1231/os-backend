@@ -37,7 +37,7 @@ mybatis:
 
 oa:
   ai:
-    endpoint: ${DASHSCOPE_ENDPOINT:https://api.vveai.com/v1/chat/completions}
+    endpoint: ${DASHSCOPE_ENDPOINT:https://api.vveai.com/chat/completions}
     model: ${DASHSCOPE_MODEL:gemini-3.5-flash-lite}
     api-key: ${DASHSCOPE_API_KEY:}
     timeout: ${DASHSCOPE_TIMEOUT:10s}

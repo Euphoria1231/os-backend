@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS department (
     KEY idx_department_status (status)
 ) ENGINE=InnoDB COMMENT='部门表';
 
-CREATE TABLE IF NOT EXISTS position (
+CREATE TABLE IF NOT EXISTS `position` (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '岗位ID',
     code VARCHAR(50) NOT NULL COMMENT '岗位编码',
     name VARCHAR(100) NOT NULL COMMENT '岗位名称',

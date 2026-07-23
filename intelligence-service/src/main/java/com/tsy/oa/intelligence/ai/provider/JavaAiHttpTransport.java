@@ -20,10 +20,12 @@ public class JavaAiHttpTransport implements AiHttpTransport {
 
     @Override
     public AiHttpResponse exchange(AiHttpRequest request) throws IOException, InterruptedException {
-        HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(request.endpoint()))
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(request.endpoint()))
                 .timeout(request.timeout())
                 .header("Authorization", "Bearer " + request.apiKey())
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "application/json");
+        request.headers().forEach(requestBuilder::header);
+        HttpRequest httpRequest = requestBuilder
                 .POST(HttpRequest.BodyPublishers.ofString(request.requestBody()))
                 .build();
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());

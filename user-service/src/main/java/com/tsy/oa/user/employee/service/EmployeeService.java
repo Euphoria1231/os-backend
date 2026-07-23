@@ -66,6 +66,13 @@ public class EmployeeService {
         return employeeMapper.findAll().stream().map(EmployeeResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<EmployeeResponse> listDirectReports(Long leaderId) {
+        return employeeMapper.findByLeaderId(leaderId).stream()
+                .map(EmployeeResponse::from)
+                .toList();
+    }
+
     @Transactional
     public EmployeeResponse update(Long id, EmployeeUpdateRequest request) {
         Employee existing = requireEmployee(id);

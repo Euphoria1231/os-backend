@@ -28,6 +28,31 @@
         <result property="processedAt" column="processed_at"/>
     </resultMap>
 
+    <resultMap id="ApprovalStatusCountsResultMap"
+               type="com.tsy.oa.flow.dashboard.dto.ApprovalStatusCountsResponse">
+        <constructor>
+            <arg column="pending_count" javaType="java.lang.Long"/>
+            <arg column="approved_count" javaType="java.lang.Long"/>
+            <arg column="rejected_count" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="ApprovalTypeDistributionResultMap"
+               type="com.tsy.oa.flow.dashboard.dto.ApprovalTypeDistributionResponse">
+        <constructor>
+            <arg column="application_type" javaType="java.lang.String"/>
+            <arg column="application_count" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="ApprovalDailyTrendResultMap"
+               type="com.tsy.oa.flow.dashboard.dto.ApprovalDailyTrendResponse">
+        <constructor>
+            <arg column="application_date" javaType="java.time.LocalDate"/>
+            <arg column="application_count" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
     <sql id="ApplicationColumns">
         id, application_no, applicant_id, approver_id, application_type,
         attendance_record_id, makeup_active_marker,
@@ -94,5 +119,32 @@
         FROM flow_application
         ORDER BY created_at DESC, id DESC
         LIMIT #{pageSize} OFFSET #{offset}
+    </select>
+
+    <select id="countDashboardStatuses" resultMap="ApprovalStatusCountsResultMap">
+        SELECT SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count,
+               SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+               SUM(CASE WHEN status = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count
+        FROM flow_application
+        WHERE created_at &gt;= #{startTime}
+          AND created_at &lt; #{endTime}
+    </select>
+
+    <select id="findDashboardTypeDistribution" resultMap="ApprovalTypeDistributionResultMap">
+        SELECT application_type, COUNT(*) AS application_count
+        FROM flow_application
+        WHERE created_at &gt;= #{startTime}
+          AND created_at &lt; #{endTime}
+        GROUP BY application_type
+        ORDER BY application_count DESC, application_type
+    </select>
+
+    <select id="findDashboardDailyTrend" resultMap="ApprovalDailyTrendResultMap">
+        SELECT DATE(created_at) AS application_date, COUNT(*) AS application_count
+        FROM flow_application
+        WHERE created_at &gt;= #{startTime}
+          AND created_at &lt; #{endTime}
+        GROUP BY DATE(created_at)
+        ORDER BY application_date
     </select>
 </mapper>

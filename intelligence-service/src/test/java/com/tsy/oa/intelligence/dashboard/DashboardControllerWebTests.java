@@ -28,7 +28,11 @@ class DashboardControllerWebTests {
         );
         OrganizationDashboardService service = new OrganizationDashboardService(client);
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new DashboardController(service, unusedAttendanceService()))
+                .standaloneSetup(new DashboardController(
+                        service,
+                        unusedAttendanceService(),
+                        unusedApprovalService()
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
@@ -61,7 +65,11 @@ class DashboardControllerWebTests {
         );
         AttendanceDashboardService service = new AttendanceDashboardService(client);
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new DashboardController(unusedOrganizationService(), service))
+                .standaloneSetup(new DashboardController(
+                        unusedOrganizationService(),
+                        service,
+                        unusedApprovalService()
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
@@ -81,11 +89,48 @@ class DashboardControllerWebTests {
                 .andExpect(jsonPath("$.code").value(40000));
     }
 
+    @Test
+    void returnsApprovalSectionForRequestedMonth() throws Exception {
+        ApprovalDashboardClient client = month -> ApiResponse.success(
+                new ApprovalDashboardClient.ApprovalStatisticsResponse(
+                        month,
+                        3,
+                        5,
+                        1,
+                        List.of(new ApprovalTypeDistributionResponse("LEAVE", 6)),
+                        List.of(new ApprovalDailyTrendResponse(LocalDate.of(2026, 7, 1), 9))
+                )
+        );
+        ApprovalDashboardService service = new ApprovalDashboardService(client);
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new DashboardController(
+                        unusedOrganizationService(),
+                        unusedAttendanceService(),
+                        service
+                ))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(get("/api/intelligence/dashboard/approvals")
+                        .header("X-Roles", "SUPER_ADMIN")
+                        .param("month", "2026-07"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.data.pendingCount").value(3))
+                .andExpect(jsonPath("$.data.data.approvedCount").value(5))
+                .andExpect(jsonPath("$.data.data.typeDistribution[0].applicationType").value("LEAVE"))
+                .andExpect(jsonPath("$.data.data.dailyTrend[0].applicationCount").value(9));
+    }
+
     private OrganizationDashboardService unusedOrganizationService() {
         return new OrganizationDashboardService(() -> ApiResponse.failure(50000, "unused"));
     }
 
     private AttendanceDashboardService unusedAttendanceService() {
         return new AttendanceDashboardService(month -> ApiResponse.failure(50000, "unused"));
+    }
+
+    private ApprovalDashboardService unusedApprovalService() {
+        return new ApprovalDashboardService(month -> ApiResponse.failure(50000, "unused"));
     }
 }

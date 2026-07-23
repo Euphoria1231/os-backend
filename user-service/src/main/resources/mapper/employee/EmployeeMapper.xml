@@ -63,6 +63,13 @@
         ORDER BY e.id
     </select>
 
+    <select id="findByLeaderId" resultMap="EmployeeResultMap">
+        SELECT <include refid="EmployeeColumns"/>
+        <include refid="EmployeeJoins"/>
+        WHERE e.leader_id = #{leaderId}
+        ORDER BY e.id
+    </select>
+
     <update id="update">
         UPDATE employee
         SET real_name = #{realName}, department_id = #{departmentId}, position_id = #{positionId},

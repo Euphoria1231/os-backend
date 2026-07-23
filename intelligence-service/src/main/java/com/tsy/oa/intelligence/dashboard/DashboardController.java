@@ -18,13 +18,25 @@ public class DashboardController {
 
     private final OrganizationDashboardService organizationService;
     private final AttendanceDashboardService attendanceService;
+    private final ApprovalDashboardService approvalService;
 
     public DashboardController(
             OrganizationDashboardService organizationService,
-            AttendanceDashboardService attendanceService
+            AttendanceDashboardService attendanceService,
+            ApprovalDashboardService approvalService
     ) {
         this.organizationService = organizationService;
         this.attendanceService = attendanceService;
+        this.approvalService = approvalService;
+    }
+
+    @GetMapping("/approvals")
+    public ApiResponse<DashboardSectionResponse<ApprovalDashboardResponse>> approvals(
+            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
+            @org.springframework.web.bind.annotation.RequestParam String month
+    ) {
+        requireAdministrator(roles);
+        return ApiResponse.success(approvalService.getApprovals(month));
     }
 
     @GetMapping("/attendance")

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +21,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/user/employees")
 public class EmployeeController {
+    private static final String EMPLOYEE_HEADER = "X-Employee-Id";
+
     private final EmployeeService employeeService;
 
     public EmployeeController(EmployeeService employeeService) {
@@ -34,6 +37,13 @@ public class EmployeeController {
     @GetMapping("/{id}")
     public ApiResponse<EmployeeResponse> getById(@PathVariable Long id) {
         return ApiResponse.success(employeeService.getById(id));
+    }
+
+    @GetMapping("/direct-reports")
+    public ApiResponse<List<EmployeeResponse>> listDirectReports(
+            @RequestHeader(EMPLOYEE_HEADER) Long leaderId
+    ) {
+        return ApiResponse.success(employeeService.listDirectReports(leaderId));
     }
 
     @GetMapping

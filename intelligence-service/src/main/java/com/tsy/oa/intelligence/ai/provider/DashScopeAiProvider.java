@@ -13,8 +13,11 @@ import com.tsy.oa.intelligence.ai.model.AiPrompt;
 
 import java.io.IOException;
 import java.net.http.HttpTimeoutException;
+import java.util.Map;
 
 public class DashScopeAiProvider implements AiProvider {
+
+    private static final Map<String, String> DEFAULT_HEADERS = Map.of("x-foo", "true");
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
@@ -40,7 +43,8 @@ public class DashScopeAiProvider implements AiProvider {
                     properties.getEndpoint(),
                     properties.getApiKey(),
                     requestBody(prompt),
-                    properties.getTimeout()
+                    properties.getTimeout(),
+                    DEFAULT_HEADERS
             ));
             if (response.statusCode() == 429) {
                 return result(AiCallStatus.DEGRADED, "AI service is rate limited. Please retry later.");
