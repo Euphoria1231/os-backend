@@ -6,4 +6,6 @@ import org.apache.ibatis.annotations.Mapper;
 public interface AiAnalysisRecordMapper {
 
     int insert(AiAnalysisRecord record);
+
+    AiAnalysisRecord findById(long id);
 }

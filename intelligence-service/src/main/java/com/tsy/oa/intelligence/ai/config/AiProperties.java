@@ -7,8 +7,8 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "oa.ai")
 public class AiProperties {
 
-    private String endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-    private String model = "qwen-plus";
+    private String endpoint = "https://api.vveai.com/v1/chat/completions";
+    private String model = "gemini-3.5-flash-lite";
     private String apiKey = "";
     private Duration timeout = Duration.ofSeconds(10);
 

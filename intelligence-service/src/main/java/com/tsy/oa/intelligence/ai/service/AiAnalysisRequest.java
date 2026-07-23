@@ -1,6 +1,10 @@
 package com.tsy.oa.intelligence.ai.service;
 
-public record AiAnalysisRequest(String requestType, String businessReferenceId, String prompt) {
+public record AiAnalysisRequest(String requestType, String businessReferenceId, long initiatorEmployeeId, String prompt) {
+
+    public AiAnalysisRequest(String requestType, String businessReferenceId, String prompt) {
+        this(requestType, businessReferenceId, 0L, prompt);
+    }
 
     public AiAnalysisRequest {
         requireText(requestType, "requestType");

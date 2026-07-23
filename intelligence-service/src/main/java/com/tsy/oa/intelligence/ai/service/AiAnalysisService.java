@@ -22,6 +22,10 @@ public class AiAnalysisService {
     }
 
     public AiCallResult analyze(AiAnalysisRequest request) {
+        return analyzeAndRecord(request).result();
+    }
+
+    public AiAnalysisAuditResult analyzeAndRecord(AiAnalysisRequest request) {
         long startedAt = System.nanoTime();
         AiCallResult result = aiProvider.generate(new AiPrompt(
                 request.requestType(),
@@ -29,15 +33,17 @@ public class AiAnalysisService {
                 request.prompt()
         ));
         long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
-        recordMapper.insert(new AiAnalysisRecord(
+        AiAnalysisRecord record = new AiAnalysisRecord(
                 request.requestType(),
                 request.businessReferenceId(),
+                request.initiatorEmployeeId(),
                 result.status().name(),
                 durationMs,
                 summary(request.requestType(), result.status()),
                 LocalDateTime.now()
-        ));
-        return result;
+        );
+        recordMapper.insert(record);
+        return new AiAnalysisAuditResult(record.getId(), result);
     }
 
     private String summary(String requestType, AiCallStatus status) {

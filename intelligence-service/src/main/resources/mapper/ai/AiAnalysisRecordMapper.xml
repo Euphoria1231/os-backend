@@ -4,10 +4,11 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper">
 
-    <insert id="insert">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ai_analysis_record (
             request_type,
             business_reference_id,
+            initiator_employee_id,
             status,
             duration_ms,
             result_summary,
@@ -15,11 +16,17 @@
         ) VALUES (
             #{requestType},
             #{businessReferenceId},
+            #{initiatorEmployeeId},
             #{status},
             #{durationMs},
             #{resultSummary},
             #{auditedAt}
         )
     </insert>
+
+    <select id="findById" resultType="com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord">
+        SELECT id, request_type, business_reference_id, initiator_employee_id, status, duration_ms, result_summary, audited_at
+        FROM ai_analysis_record WHERE id = #{id}
+    </select>
 
 </mapper>
