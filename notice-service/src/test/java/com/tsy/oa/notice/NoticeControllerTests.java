@@ -2,6 +2,8 @@ package com.tsy.oa.notice;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.OperationLogCommand;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,13 +11,20 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -23,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = NoticeControllerTests.TestApplication.class)
 @AutoConfigureMockMvc
+@Import(NoticeControllerTests.NoticeTestConfiguration.class)
 class NoticeControllerTests {
 
     private static final String EMPLOYEE_HEADER = "X-Employee-Id";
@@ -36,15 +46,21 @@ class NoticeControllerTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private RecordedOperationLogs operationLogs;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM notice_read");
         jdbcTemplate.update("DELETE FROM notice");
+        operationLogs.clear();
     }
 
     @Test
     void publishesNoticeAndTracksEmployeeReadStatus() throws Exception {
         long noticeId = publishNotice();
+
+        assertEquals(1, operationLogs.count("PUBLISH_NOTICE", "SUCCESS"));
 
         mockMvc.perform(get("/api/notices").header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isOk())
@@ -97,6 +113,58 @@ class NoticeControllerTests {
         mockMvc.perform(put("/api/notices/{id}/read", 999L).header(EMPLOYEE_HEADER, "20"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(40401));
+    }
+
+    @Test
+    void updatesAndSoftDeletesPublishedNotice() throws Exception {
+        long noticeId = publishNotice();
+
+        mockMvc.perform(put("/api/notices/{id}", noticeId)
+                        .header(EMPLOYEE_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new NoticePayload(
+                                "国庆节放假安排（更新）",
+                                "公司国庆节放假安排已经更新。"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("国庆节放假安排（更新）"));
+
+        mockMvc.perform(delete("/api/notices/{id}", noticeId)
+                        .header(EMPLOYEE_HEADER, "1"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/notices/{id}", noticeId)
+                        .header(EMPLOYEE_HEADER, "20"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40401));
+        assertEquals("DELETED", jdbcTemplate.queryForObject(
+                "SELECT status FROM notice WHERE id = ?",
+                String.class,
+                noticeId
+        ));
+        assertEquals(1, operationLogs.count("UPDATE_NOTICE", "SUCCESS"));
+        assertEquals(1, operationLogs.count("DELETE_NOTICE", "SUCCESS"));
+    }
+
+    @Test
+    void recordsFailedUpdateAndDeleteForMissingNotice() throws Exception {
+        mockMvc.perform(put("/api/notices/{id}", 999L)
+                        .header(EMPLOYEE_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new NoticePayload(
+                                "公告标题",
+                                "公告正文"
+                        ))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40401));
+
+        mockMvc.perform(delete("/api/notices/{id}", 999L)
+                        .header(EMPLOYEE_HEADER, "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(40401));
+
+        assertEquals(1, operationLogs.count("UPDATE_NOTICE", "FAILURE"));
+        assertEquals(1, operationLogs.count("DELETE_NOTICE", "FAILURE"));
     }
 
     @Test
@@ -166,5 +234,43 @@ class NoticeControllerTests {
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.notice")
     static class TestApplication {
+    }
+
+    @TestConfiguration
+    static class NoticeTestConfiguration {
+
+        @Bean
+        RecordedOperationLogs recordedOperationLogs() {
+            return new RecordedOperationLogs();
+        }
+
+        @Bean
+        @Primary
+        BusinessOperationLogger testBusinessOperationLogger(RecordedOperationLogs logs) {
+            return new BusinessOperationLogger(
+                    "notice-service", logs::add, (command, exception) -> {
+                    }
+            );
+        }
+    }
+
+    static class RecordedOperationLogs {
+
+        private final List<OperationLogCommand> commands = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        void add(OperationLogCommand command) {
+            commands.add(command);
+        }
+
+        long count(String operationType, String status) {
+            return commands.stream()
+                    .filter(command -> operationType.equals(command.operationType()))
+                    .filter(command -> status.equals(command.operationStatus()))
+                    .count();
+        }
+
+        void clear() {
+            commands.clear();
+        }
     }
 }

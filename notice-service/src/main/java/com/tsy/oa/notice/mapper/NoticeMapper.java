@@ -12,6 +12,10 @@ public interface NoticeMapper {
 
     int insert(Notice notice);
 
+    int updatePublished(Notice notice);
+
+    int softDeletePublished(Long id);
+
     Notice findPublishedById(Long id);
 
     List<NoticeView> findPublishedForEmployee(Long employeeId);

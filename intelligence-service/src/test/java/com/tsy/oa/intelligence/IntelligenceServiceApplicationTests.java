@@ -3,6 +3,8 @@ package com.tsy.oa.intelligence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.intelligence.search.support.ElasticsearchStubServer;
+import com.tsy.oa.intelligence.support.OperationLogTestConfiguration;
+import com.tsy.oa.intelligence.support.RecordedOperationLogs;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.context.annotation.Import;
 
 import java.io.IOException;
 
@@ -24,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = IntelligenceServiceApplication.class)
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@Import(OperationLogTestConfiguration.class)
 class IntelligenceServiceApplicationTests {
 
     private static final ElasticsearchStubServer ELASTICSEARCH = startElasticsearch();
@@ -33,6 +37,9 @@ class IntelligenceServiceApplicationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private RecordedOperationLogs operationLogs;
 
     @DynamicPropertySource
     static void elasticsearchProperties(DynamicPropertyRegistry registry) {
@@ -49,6 +56,7 @@ class IntelligenceServiceApplicationTests {
     @BeforeEach
     void resetElasticsearch() {
         ELASTICSEARCH.reset();
+        operationLogs.clear();
     }
 
     @Test
@@ -187,6 +195,10 @@ class IntelligenceServiceApplicationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(40300));
 
+        org.assertj.core.api.Assertions.assertThat(
+                operationLogs.count("REBUILD_INDEX", "FAILURE")
+        ).isEqualTo(1);
+
         mockMvc.perform(get("/api/intelligence/search/indexes/health")
                         .header("X-Employee-Id", "10")
                         .header("X-Roles", "EMPLOYEE"))
@@ -266,6 +278,9 @@ class IntelligenceServiceApplicationTests {
         org.assertj.core.api.Assertions.assertThat(ELASTICSEARCH.refreshRequests())
                 .contains("/" + noticeTarget + "/_refresh", "/" + applicationTarget + "/_refresh");
         org.assertj.core.api.Assertions.assertThat(ELASTICSEARCH.aliasRequests()).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(
+                operationLogs.count("REBUILD_INDEX", "SUCCESS")
+        ).isEqualTo(2);
     }
 
     @Test
@@ -280,6 +295,10 @@ class IntelligenceServiceApplicationTests {
                         .header("X-Employee-Id", "1")
                         .header("X-Roles", "SUPER_ADMIN"))
                 .andExpect(status().isInternalServerError());
+
+        org.assertj.core.api.Assertions.assertThat(
+                operationLogs.count("REBUILD_INDEX", "FAILURE")
+        ).isEqualTo(1);
 
         mockMvc.perform(get("/api/intelligence/search/indexes/health"))
                 .andExpect(status().isOk())

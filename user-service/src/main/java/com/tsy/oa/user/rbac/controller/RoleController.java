@@ -1,12 +1,16 @@
 package com.tsy.oa.user.rbac.controller;
 
 import com.tsy.oa.common.api.ApiResponse;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.HttpOperationLogContexts;
+import com.tsy.oa.common.log.OperationLogContext;
 import com.tsy.oa.user.rbac.dto.RoleGrantRequest;
 import com.tsy.oa.user.rbac.dto.RoleGrantResponse;
 import com.tsy.oa.user.rbac.dto.RoleRequest;
 import com.tsy.oa.user.rbac.dto.RoleResponse;
 import com.tsy.oa.user.rbac.service.RbacService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -22,10 +27,14 @@ import java.util.List;
 @RequestMapping("/api/user/roles")
 public class RoleController {
 
-    private final RbacService rbacService;
+    private static final String EMPLOYEE_HEADER = "X-Employee-Id";
 
-    public RoleController(RbacService rbacService) {
+    private final RbacService rbacService;
+    private final BusinessOperationLogger operationLogger;
+
+    public RoleController(RbacService rbacService, BusinessOperationLogger operationLogger) {
         this.rbacService = rbacService;
+        this.operationLogger = operationLogger;
     }
 
     @PostMapping
@@ -54,9 +63,22 @@ public class RoleController {
     @PutMapping("/{id}/permissions")
     public ApiResponse<Void> assignPermissions(
             @PathVariable Long id,
-            @Valid @RequestBody RoleGrantRequest request
+            @Valid @RequestBody RoleGrantRequest request,
+            @RequestHeader(value = EMPLOYEE_HEADER, required = false) Long operatorId,
+            HttpServletRequest httpRequest
     ) {
-        rbacService.assignRolePermissions(id, request);
+        OperationLogContext context = HttpOperationLogContexts.create(
+                httpRequest,
+                operatorId,
+                null,
+                "RBAC",
+                "ASSIGN_ROLE_PERMISSIONS",
+                "ROLE",
+                id.toString(),
+                "修改角色菜单和接口权限，菜单数量：" + request.menuIds().size()
+                        + "，接口数量：" + request.apiPermissionIds().size()
+        );
+        operationLogger.execute(context, () -> rbacService.assignRolePermissions(id, request));
         return ApiResponse.success(null);
     }
 

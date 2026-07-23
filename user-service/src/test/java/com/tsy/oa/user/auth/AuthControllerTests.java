@@ -21,6 +21,8 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -45,6 +47,7 @@ class AuthControllerTests {
 
     @BeforeEach
     void prepareEmployee() {
+        jdbcTemplate.update("DELETE FROM business_operation_log");
         jdbcTemplate.update("DELETE FROM employee");
         jdbcTemplate.update("DELETE FROM position");
         jdbcTemplate.update("DELETE FROM department");
@@ -63,6 +66,13 @@ class AuthControllerTests {
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.data.employee.username").value("zhangsan"));
+
+        assertEquals(1, logCount("LOGIN", "SUCCESS"));
+        String summary = jdbcTemplate.queryForObject(
+                "SELECT summary FROM business_operation_log WHERE operation_type = 'LOGIN'",
+                String.class
+        );
+        assertFalse(summary.contains("Password123"));
     }
 
     @Test
@@ -80,6 +90,12 @@ class AuthControllerTests {
                         .content(loginJson("zhangsan", "Password123")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(40301));
+
+        assertEquals(2, logCount("LOGIN", "FAILURE"));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_operation_log WHERE summary LIKE '%wrong-password%'",
+                Integer.class
+        ));
     }
 
     @Test
@@ -98,8 +114,16 @@ class AuthControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.username").value("zhangsan"));
 
-        mockMvc.perform(post("/api/user/auth/logout").header("Authorization", "Bearer " + token))
+        mockMvc.perform(post("/api/user/auth/logout")
+                        .header("Authorization", "Bearer " + token)
+                        .header("X-Employee-Id", 1L))
                 .andExpect(status().isOk());
+
+        assertEquals(1, logCount("LOGOUT", "SUCCESS"));
+        assertEquals(1L, jdbcTemplate.queryForObject(
+                "SELECT operator_id FROM business_operation_log WHERE operation_type = 'LOGOUT'",
+                Long.class
+        ));
 
         mockMvc.perform(get("/api/user/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized())
@@ -122,6 +146,15 @@ class AuthControllerTests {
 
     private String loginJson(String username, String password) throws Exception {
         return objectMapper.writeValueAsString(new LoginPayload(username, password));
+    }
+
+    private int logCount(String operationType, String status) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_operation_log WHERE operation_type = ? AND operation_status = ?",
+                Integer.class,
+                operationType,
+                status
+        );
     }
 
     private record LoginPayload(String username, String password) {

@@ -45,6 +45,7 @@ class RbacControllerTests {
 
     @BeforeEach
     void resetData() {
+        jdbcTemplate.update("DELETE FROM business_operation_log");
         jdbcTemplate.update("DELETE FROM role_api_permission");
         jdbcTemplate.update("DELETE FROM role_menu");
         jdbcTemplate.update("DELETE FROM employee_role");
@@ -103,6 +104,7 @@ class RbacControllerTests {
         );
 
         mockMvc.perform(put("/api/user/roles/{id}/permissions", roleId)
+                        .header("X-Employee-Id", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RoleGrantPayload(
                                 List.of(menuId), List.of(apiPermissionId)
@@ -110,6 +112,7 @@ class RbacControllerTests {
                 .andExpect(status().isOk());
 
         mockMvc.perform(put("/api/user/employees/{id}/roles", 1L)
+                        .header("X-Employee-Id", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new EmployeeRolePayload(List.of(roleId)))))
                 .andExpect(status().isOk());
@@ -119,6 +122,9 @@ class RbacControllerTests {
                 .andExpect(jsonPath("$.data.roles[0].code").value("ADMIN"))
                 .andExpect(jsonPath("$.data.menus[0].path").value("/employees"))
                 .andExpect(jsonPath("$.data.apiPermissions[0].authority").value("GET:/api/user/employees/**"));
+
+        assertEquals(1, logCount("ASSIGN_ROLE_PERMISSIONS", "SUCCESS"));
+        assertEquals(1, logCount("ASSIGN_EMPLOYEE_ROLES", "SUCCESS"));
     }
 
     @Test
@@ -130,6 +136,7 @@ class RbacControllerTests {
                 apiPermissionJson("USER_EMPLOYEE_READ", "GET", "/api/user/employees/**")
         );
         mockMvc.perform(put("/api/user/roles/{id}/permissions", roleId)
+                        .header("X-Employee-Id", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RoleGrantPayload(
                                 List.of(menuId), List.of(apiPermissionId)
@@ -168,6 +175,7 @@ class RbacControllerTests {
 
     private long createAndReadId(String path, String body) throws Exception {
         String response = mockMvc.perform(post(path)
+                        .header("X-Employee-Id", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -175,6 +183,15 @@ class RbacControllerTests {
                 .getResponse()
                 .getContentAsString();
         return objectMapper.readTree(response).path("data").path("id").asLong();
+    }
+
+    private int logCount(String operationType, String status) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_operation_log WHERE operation_type = ? AND operation_status = ?",
+                Integer.class,
+                operationType,
+                status
+        );
     }
 
     private String roleJson(String code, String name) throws Exception {

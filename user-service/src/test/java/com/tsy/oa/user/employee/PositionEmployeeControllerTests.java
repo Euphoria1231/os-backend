@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,6 +36,7 @@ class PositionEmployeeControllerTests {
 
     @BeforeEach
     void clearOrganizationData() {
+        jdbcTemplate.update("DELETE FROM business_operation_log");
         jdbcTemplate.update("DELETE FROM employee");
         jdbcTemplate.update("DELETE FROM position");
         jdbcTemplate.update("DELETE FROM department");
@@ -49,6 +51,7 @@ class PositionEmployeeControllerTests {
                 .andExpect(jsonPath("$.data.code").value("JAVA_DEV"));
 
         mockMvc.perform(put("/api/user/positions/{id}", positionId)
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(positionJson("JAVA_DEV", "高级Java开发工程师")))
                 .andExpect(status().isOk())
@@ -58,12 +61,17 @@ class PositionEmployeeControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1));
 
-        mockMvc.perform(delete("/api/user/positions/{id}", positionId))
+        mockMvc.perform(delete("/api/user/positions/{id}", positionId)
+                        .header("X-Employee-Id", 99L))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/user/positions/{id}", positionId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(40402));
+
+        assertEquals(1, logCount("CREATE_POSITION", "SUCCESS"));
+        assertEquals(1, logCount("UPDATE_POSITION", "SUCCESS"));
+        assertEquals(1, logCount("DELETE_POSITION", "SUCCESS"));
     }
 
     @Test
@@ -86,6 +94,7 @@ class PositionEmployeeControllerTests {
                 .andExpect(jsonPath("$.data.passwordHash").doesNotExist());
 
         mockMvc.perform(put("/api/user/employees/{id}", employeeId)
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(employeeUpdateJson("张三丰", departmentId, positionId)))
                 .andExpect(status().isOk())
@@ -95,18 +104,24 @@ class PositionEmployeeControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1));
 
-        mockMvc.perform(delete("/api/user/employees/{id}", employeeId))
+        mockMvc.perform(delete("/api/user/employees/{id}", employeeId)
+                        .header("X-Employee-Id", 99L))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/user/employees/{id}", employeeId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(40403));
+
+        assertEquals(1, logCount("CREATE_EMPLOYEE", "SUCCESS"));
+        assertEquals(1, logCount("UPDATE_EMPLOYEE", "SUCCESS"));
+        assertEquals(1, logCount("DELETE_EMPLOYEE", "SUCCESS"));
     }
 
     @Test
     void rejectsDuplicatePositionCodeAndEmployeeAccount() throws Exception {
         createPosition("JAVA_DEV", "Java开发工程师");
         mockMvc.perform(post("/api/user/positions")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(positionJson("JAVA_DEV", "重复岗位")))
                 .andExpect(status().isConflict())
@@ -120,10 +135,14 @@ class PositionEmployeeControllerTests {
         createEmployee("E001", "zhangsan", "Password123", departmentId, positionId);
 
         mockMvc.perform(post("/api/user/employees")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(employeeCreateJson("E002", "zhangsan", "Password123", departmentId, positionId)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40904));
+
+        assertEquals(1, logCount("CREATE_POSITION", "FAILURE"));
+        assertEquals(1, logCount("CREATE_EMPLOYEE", "FAILURE"));
     }
 
     @Test
@@ -169,6 +188,7 @@ class PositionEmployeeControllerTests {
 
     private long createDepartment(String name) throws Exception {
         String response = mockMvc.perform(post("/api/user/departments")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new DepartmentPayload(0L, name, null, 1, 1))))
                 .andExpect(status().isOk())
@@ -180,6 +200,7 @@ class PositionEmployeeControllerTests {
 
     private long createPosition(String code, String name) throws Exception {
         String response = mockMvc.perform(post("/api/user/positions")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(positionJson(code, name)))
                 .andExpect(status().isOk())
@@ -197,6 +218,7 @@ class PositionEmployeeControllerTests {
             long positionId
     ) throws Exception {
         String response = mockMvc.perform(post("/api/user/employees")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(employeeCreateJson(employeeNo, username, password, departmentId, positionId)))
                 .andExpect(status().isOk())
@@ -205,6 +227,15 @@ class PositionEmployeeControllerTests {
                 .getContentAsString();
         JsonNode body = objectMapper.readTree(response);
         return body.path("data").path("id").asLong();
+    }
+
+    private int logCount(String operationType, String status) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_operation_log WHERE operation_type = ? AND operation_status = ?",
+                Integer.class,
+                operationType,
+                status
+        );
     }
 
     private String positionJson(String code, String name) throws Exception {

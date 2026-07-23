@@ -3,6 +3,9 @@ package com.tsy.oa.intelligence.search.controller;
 import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.HttpOperationLogContexts;
+import com.tsy.oa.common.log.OperationLogContext;
 import com.tsy.oa.intelligence.search.dto.ApplicationSearchResponse;
 import com.tsy.oa.intelligence.search.dto.IndexHealthResponse;
 import com.tsy.oa.intelligence.search.dto.NoticeSearchResponse;
@@ -12,6 +15,7 @@ import com.tsy.oa.intelligence.search.service.SearchIndexAdministrationService;
 import com.tsy.oa.intelligence.search.service.SearchService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,13 +36,16 @@ public class SearchController {
 
     private final SearchService searchService;
     private final SearchIndexAdministrationService administrationService;
+    private final BusinessOperationLogger operationLogger;
 
     public SearchController(
             SearchService searchService,
-            SearchIndexAdministrationService administrationService
+            SearchIndexAdministrationService administrationService,
+            BusinessOperationLogger operationLogger
     ) {
         this.searchService = searchService;
         this.administrationService = administrationService;
+        this.operationLogger = operationLogger;
     }
 
     @GetMapping("/notices")
@@ -68,18 +75,36 @@ public class SearchController {
 
     @PostMapping("/indexes/notices/rebuild")
     public ApiResponse<RebuildProgressResponse> rebuildNotices(
-            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles
+            @RequestHeader("X-Employee-Id") @Min(1) long employeeId,
+            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
+            HttpServletRequest httpRequest
     ) {
-        requireAdministrator(roles);
-        return ApiResponse.success(administrationService.rebuildNotices());
+        OperationLogContext context = rebuildContext(
+                httpRequest, employeeId, "NOTICE_INDEX", "oa-notices", "重建公告索引"
+        );
+        return ApiResponse.success(operationLogger.execute(context, () -> {
+            requireAdministrator(roles);
+            return administrationService.rebuildNotices();
+        }));
     }
 
     @PostMapping("/indexes/applications/rebuild")
     public ApiResponse<RebuildProgressResponse> rebuildApplications(
-            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles
+            @RequestHeader("X-Employee-Id") @Min(1) long employeeId,
+            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
+            HttpServletRequest httpRequest
     ) {
-        requireAdministrator(roles);
-        return ApiResponse.success(administrationService.rebuildApplications());
+        OperationLogContext context = rebuildContext(
+                httpRequest,
+                employeeId,
+                "APPLICATION_INDEX",
+                "oa-applications",
+                "重建审批申请索引"
+        );
+        return ApiResponse.success(operationLogger.execute(context, () -> {
+            requireAdministrator(roles);
+            return administrationService.rebuildApplications();
+        }));
     }
 
     @GetMapping("/indexes/health")
@@ -99,5 +124,24 @@ public class SearchController {
         if (!isAdministrator(roles)) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
+    }
+
+    private OperationLogContext rebuildContext(
+            HttpServletRequest request,
+            long employeeId,
+            String targetType,
+            String targetId,
+            String summary
+    ) {
+        return HttpOperationLogContexts.create(
+                request,
+                employeeId,
+                null,
+                "SEARCH",
+                "REBUILD_INDEX",
+                targetType,
+                targetId,
+                summary
+        );
     }
 }

@@ -39,6 +39,25 @@ public class NoticeService {
         return NoticeResponse.from(requirePublishedNotice(notice.getId()));
     }
 
+    @Transactional
+    public NoticeResponse update(Long noticeId, NoticePublishRequest request) {
+        Notice notice = new Notice();
+        notice.setId(noticeId);
+        notice.setTitle(request.title().trim());
+        notice.setContent(request.content().trim());
+        if (noticeMapper.updatePublished(notice) != 1) {
+            throw new BusinessException(NoticeErrorCode.NOTICE_NOT_FOUND);
+        }
+        return NoticeResponse.from(requirePublishedNotice(noticeId));
+    }
+
+    @Transactional
+    public void delete(Long noticeId) {
+        if (noticeMapper.softDeletePublished(noticeId) != 1) {
+            throw new BusinessException(NoticeErrorCode.NOTICE_NOT_FOUND);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<NoticeResponse> listForEmployee(Long employeeId) {
         return noticeMapper.findPublishedForEmployee(employeeId).stream()

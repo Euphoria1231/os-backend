@@ -3,6 +3,8 @@ package com.tsy.oa.attendance;
 import com.tsy.oa.attendance.employee.EmployeeDirectory;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.OperationLogCommand;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +28,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Set;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -60,6 +63,9 @@ class AttendanceControllerTests {
     @Autowired
     private InMemoryEmployeeDirectory employeeDirectory;
 
+    @Autowired
+    private RecordedOperationLogs operationLogs;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM attendance_makeup_usage");
@@ -67,6 +73,7 @@ class AttendanceControllerTests {
         jdbcTemplate.update("DELETE FROM attendance_record");
         redisGuard.clear();
         employeeDirectory.clear();
+        operationLogs.clear();
         employeeDirectory.setLeader(10L, 20L);
         clock.setInstant(Instant.parse("2026-07-20T01:05:00Z"));
     }
@@ -149,6 +156,9 @@ class AttendanceControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.clockInTime").value("2026-07-20T09:05:00"))
                 .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T18:00:00"));
+
+        assertEquals(1, operationLogs.count("CLOCK_IN", "SUCCESS"));
+        assertEquals(1, operationLogs.count("CLOCK_OUT", "SUCCESS"));
     }
 
     @Test
@@ -162,6 +172,10 @@ class AttendanceControllerTests {
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40901));
+
+        assertEquals(1, operationLogs.count("CLOCK_OUT", "FAILURE"));
+        assertEquals(1, operationLogs.count("CLOCK_IN", "SUCCESS"));
+        assertEquals(1, operationLogs.count("CLOCK_IN", "FAILURE"));
     }
 
     @Test
@@ -558,6 +572,20 @@ class AttendanceControllerTests {
         InMemoryEmployeeDirectory inMemoryEmployeeDirectory() {
             return new InMemoryEmployeeDirectory();
         }
+
+        @Bean
+        RecordedOperationLogs recordedOperationLogs() {
+            return new RecordedOperationLogs();
+        }
+
+        @Bean
+        @Primary
+        BusinessOperationLogger testBusinessOperationLogger(RecordedOperationLogs logs) {
+            return new BusinessOperationLogger(
+                    "attendance-service", logs::add, (command, exception) -> {
+                    }
+            );
+        }
     }
 
     static class MutableClock extends Clock {
@@ -647,6 +675,26 @@ class AttendanceControllerTests {
 
         void clear() {
             leaders.clear();
+        }
+    }
+
+    static class RecordedOperationLogs {
+
+        private final List<OperationLogCommand> commands = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        void add(OperationLogCommand command) {
+            commands.add(command);
+        }
+
+        long count(String operationType, String status) {
+            return commands.stream()
+                    .filter(command -> operationType.equals(command.operationType()))
+                    .filter(command -> status.equals(command.operationStatus()))
+                    .count();
+        }
+
+        void clear() {
+            commands.clear();
         }
     }
 }

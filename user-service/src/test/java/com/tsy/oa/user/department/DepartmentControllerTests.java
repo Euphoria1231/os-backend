@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -33,6 +34,7 @@ class DepartmentControllerTests {
 
     @BeforeEach
     void clearDepartments() {
+        jdbcTemplate.update("DELETE FROM business_operation_log");
         jdbcTemplate.update("DELETE FROM department");
     }
 
@@ -56,23 +58,29 @@ class DepartmentControllerTests {
         long departmentId = createDepartment("研发部");
 
         mockMvc.perform(put("/api/user/departments/{id}", departmentId)
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(departmentJson("技术研发部")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("技术研发部"));
 
-        mockMvc.perform(delete("/api/user/departments/{id}", departmentId))
+        mockMvc.perform(delete("/api/user/departments/{id}", departmentId)
+                        .header("X-Employee-Id", 99L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/user/departments/{id}", departmentId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(40401));
+
+        assertEquals(1, logCount("UPDATE_DEPARTMENT", "SUCCESS"));
+        assertEquals(1, logCount("DELETE_DEPARTMENT", "SUCCESS"));
     }
 
     @Test
     void rejectsBlankAndDuplicateDepartmentNames() throws Exception {
         mockMvc.perform(post("/api/user/departments")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(departmentJson("")))
                 .andExpect(status().isBadRequest())
@@ -81,10 +89,13 @@ class DepartmentControllerTests {
         createDepartment("研发部");
 
         mockMvc.perform(post("/api/user/departments")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(departmentJson("研发部")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40901));
+
+        assertEquals(1, logCount("CREATE_DEPARTMENT", "FAILURE"));
     }
 
     @Test
@@ -96,6 +107,7 @@ class DepartmentControllerTests {
 
     private long createDepartment(String name) throws Exception {
         String response = mockMvc.perform(post("/api/user/departments")
+                        .header("X-Employee-Id", 99L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(departmentJson(name)))
                 .andExpect(status().isOk())
@@ -106,6 +118,15 @@ class DepartmentControllerTests {
 
         JsonNode body = objectMapper.readTree(response);
         return body.path("data").path("id").asLong();
+    }
+
+    private int logCount(String operationType, String status) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_operation_log WHERE operation_type = ? AND operation_status = ?",
+                Integer.class,
+                operationType,
+                status
+        );
     }
 
     private String departmentJson(String name) throws Exception {

@@ -28,6 +28,21 @@
         VALUES (#{title}, #{content}, #{publisherId}, #{status}, #{publishedAt})
     </insert>
 
+    <update id="updatePublished">
+        UPDATE notice
+        SET title = #{title},
+            content = #{content},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PUBLISHED'
+    </update>
+
+    <update id="softDeletePublished">
+        UPDATE notice
+        SET status = 'DELETED',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND status = 'PUBLISHED'
+    </update>
+
     <select id="findPublishedById" resultMap="NoticeResultMap">
         SELECT <include refid="NoticeColumns"/>
         FROM notice n

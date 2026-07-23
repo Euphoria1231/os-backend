@@ -3,6 +3,8 @@ package com.tsy.oa.flow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.OperationLogCommand;
 import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
@@ -57,6 +59,9 @@ class FlowControllerTests {
     @Autowired
     private InMemoryAttendanceMakeupGateway attendanceMakeupGateway;
 
+    @Autowired
+    private RecordedOperationLogs operationLogs;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
@@ -65,6 +70,7 @@ class FlowControllerTests {
         employeeDirectory.clear();
         employeeDirectory.setApprovalRoute(10L, 20L, 30L);
         attendanceMakeupGateway.clear();
+        operationLogs.clear();
         attendanceMakeupGateway.allow(
                 1L, 10L, LocalDate.of(2026, 7, 20), 5
         );
@@ -113,6 +119,9 @@ class FlowControllerTests {
         mockMvc.perform(get("/api/flow/applications/mine").header(EMPLOYEE_HEADER, "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("APPROVED"));
+
+        assertEquals(1, operationLogs.count("SUBMIT_LEAVE", "SUCCESS"));
+        assertEquals(2, operationLogs.count("APPROVE_APPLICATION", "SUCCESS"));
     }
 
     @Test
@@ -125,6 +134,8 @@ class FlowControllerTests {
                         .content("{\"comment\":\"越权审批\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(40301));
+
+        assertEquals(1, operationLogs.count("APPROVE_APPLICATION", "FAILURE"));
     }
 
     @Test
@@ -137,6 +148,9 @@ class FlowControllerTests {
                         .content("{\"comment\":\"时间安排不合理\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        assertEquals(1, operationLogs.count("SUBMIT_OVERTIME", "SUCCESS"));
+        assertEquals(1, operationLogs.count("REJECT_APPLICATION", "SUCCESS"));
     }
 
     @Test
@@ -151,6 +165,8 @@ class FlowControllerTests {
                 .andExpect(jsonPath("$.data.applicationType").value("MAKEUP"))
                 .andExpect(jsonPath("$.data.attendanceRecordId").value(1))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        assertEquals(1, operationLogs.count("SUBMIT_MAKEUP", "SUCCESS"));
     }
 
     @Test
@@ -305,6 +321,8 @@ class FlowControllerTests {
                         .content(applicationJson("家庭事务")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value(42201));
+
+        assertEquals(1, operationLogs.count("SUBMIT_LEAVE", "FAILURE"));
     }
 
     @Test
@@ -420,6 +438,20 @@ class FlowControllerTests {
         InMemoryAttendanceMakeupGateway inMemoryAttendanceMakeupGateway() {
             return new InMemoryAttendanceMakeupGateway();
         }
+
+        @Bean
+        RecordedOperationLogs recordedOperationLogs() {
+            return new RecordedOperationLogs();
+        }
+
+        @Bean
+        @Primary
+        BusinessOperationLogger testBusinessOperationLogger(RecordedOperationLogs logs) {
+            return new BusinessOperationLogger(
+                    "flow-service", logs::add, (command, exception) -> {
+                    }
+            );
+        }
     }
 
     static class InMemoryEmployeeDirectory implements EmployeeDirectory {
@@ -504,6 +536,26 @@ class FlowControllerTests {
             eligibilityByRecord.clear();
             completedApplications.clear();
             completionFails = false;
+        }
+    }
+
+    static class RecordedOperationLogs {
+
+        private final List<OperationLogCommand> commands = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        void add(OperationLogCommand command) {
+            commands.add(command);
+        }
+
+        long count(String operationType, String status) {
+            return commands.stream()
+                    .filter(command -> operationType.equals(command.operationType()))
+                    .filter(command -> status.equals(command.operationStatus()))
+                    .count();
+        }
+
+        void clear() {
+            commands.clear();
         }
     }
 }

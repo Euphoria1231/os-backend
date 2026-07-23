@@ -7,6 +7,10 @@ import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
 import com.tsy.oa.attendance.dto.MakeupQuotaResponse;
 import com.tsy.oa.attendance.service.AttendanceService;
 import com.tsy.oa.common.api.ApiResponse;
+import com.tsy.oa.common.log.BusinessOperationLogger;
+import com.tsy.oa.common.log.HttpOperationLogContexts;
+import com.tsy.oa.common.log.OperationLogContext;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,25 +34,48 @@ public class AttendanceController {
     private static final String EMPLOYEE_HEADER = "X-Employee-Id";
 
     private final AttendanceService attendanceService;
+    private final BusinessOperationLogger operationLogger;
 
-    public AttendanceController(AttendanceService attendanceService) {
+    public AttendanceController(
+            AttendanceService attendanceService,
+            BusinessOperationLogger operationLogger
+    ) {
         this.attendanceService = attendanceService;
+        this.operationLogger = operationLogger;
     }
 
     @PostMapping("/clock-in")
     public ApiResponse<AttendanceRecordResponse> clockIn(
             @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
-            @Valid @RequestBody ClockLocationRequest request
+            @Valid @RequestBody ClockLocationRequest request,
+            HttpServletRequest httpRequest
     ) {
-        return ApiResponse.success(attendanceService.clockIn(employeeId, request));
+        OperationLogContext context = logContext(
+                httpRequest, employeeId, "CLOCK_IN", "上班打卡"
+        );
+        AttendanceRecordResponse response = operationLogger.execute(
+                context,
+                () -> attendanceService.clockIn(employeeId, request),
+                result -> result.id().toString()
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/clock-out")
     public ApiResponse<AttendanceRecordResponse> clockOut(
             @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
-            @Valid @RequestBody ClockLocationRequest request
+            @Valid @RequestBody ClockLocationRequest request,
+            HttpServletRequest httpRequest
     ) {
-        return ApiResponse.success(attendanceService.clockOut(employeeId, request));
+        OperationLogContext context = logContext(
+                httpRequest, employeeId, "CLOCK_OUT", "下班打卡"
+        );
+        AttendanceRecordResponse response = operationLogger.execute(
+                context,
+                () -> attendanceService.clockOut(employeeId, request),
+                result -> result.id().toString()
+        );
+        return ApiResponse.success(response);
     }
 
     @GetMapping("/clock-config")
@@ -89,5 +116,23 @@ public class AttendanceController {
             @RequestParam YearMonth quotaMonth
     ) {
         return ApiResponse.success(attendanceService.getMakeupQuota(employeeId, quotaMonth));
+    }
+
+    private OperationLogContext logContext(
+            HttpServletRequest request,
+            Long employeeId,
+            String operationType,
+            String summary
+    ) {
+        return HttpOperationLogContexts.create(
+                request,
+                employeeId,
+                null,
+                "ATTENDANCE",
+                operationType,
+                "ATTENDANCE_RECORD",
+                null,
+                summary
+        );
     }
 }
