@@ -29,6 +29,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.failure(CommonErrorCode.BAD_REQUEST));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument() {
+        return ResponseEntity.badRequest().body(ApiResponse.failure(CommonErrorCode.BAD_REQUEST));
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResourceFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.failure(CommonErrorCode.NOT_FOUND));
