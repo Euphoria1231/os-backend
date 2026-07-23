@@ -10,9 +10,12 @@ public class AiPromptSanitizer {
 
     private static final int MAX_REASON_LENGTH = 800;
     private static final String REDACTED = "[REDACTED]";
+    private static final String CREDENTIAL_KEY = "(?i)(?:\\b|[\\\"'{,])(?:[a-z0-9_-]*?(?:token|password|passwd|api[-_ ]?key|secret)[a-z0-9_-]*)\\s*[\\\"']?\\s*[:=]\\s*";
     private static final List<Pattern> SENSITIVE_PATTERNS = List.of(
             Pattern.compile("(?i)bearer\\s+[a-z0-9~+/=._-]+"),
-            Pattern.compile("(?i)(?:\\b|[\\\"'{,])(?:[a-z0-9_-]*?(?:token|password|passwd|api[-_ ]?key|secret)[a-z0-9_-]*)\\s*[\\\"']?\\s*[:=]\\s*[\\\"']?[^\\s,}\\\"']+[\\\"']?"),
+            Pattern.compile(CREDENTIAL_KEY + "\\\"[^\\\"]*\\\""),
+            Pattern.compile(CREDENTIAL_KEY + "'[^']*'"),
+            Pattern.compile(CREDENTIAL_KEY + "[^\\s,}\\]]+"),
             Pattern.compile("(?<!\\d)1[3-9]\\d(?:[ -]?\\d{4}){2}(?!\\d)"),
             Pattern.compile("(?i)(?<![a-z0-9])\\d{17}[0-9x](?![a-z0-9])"),
             Pattern.compile("(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}")

@@ -21,7 +21,8 @@ class ApprovalPromptSanitizationTests {
         AiProvider provider = prompt -> { captured.set(prompt); return new AiCallResult(AiCallStatus.SUCCESS, "safe"); };
         AiAnalysisService aiService = new AiAnalysisService(provider, new NoopMapper());
         String reason = "Bearer ab~+/=cd DASHSCOPE_API_KEY=sk-live-value JWT_SECRET=hunter2 access_token=abcd "
-                + "{\"token\":\"json-secret\"} password=letmein apiKey=key123 secret=hide "
+                + "{\"token\":\"json-secret\"} \"password\":\"correct horse battery staple\" api_key='sk live value' "
+                + "password=letmein apiKey=key123 secret=hide "
                 + "phone 13800138000 138-0013-8000 138 0013 8000 email user@example.com id 11010519491231002X "
                 + "x".repeat(2500);
         ApprovalAnalysisService service = new ApprovalAnalysisService(id ->
@@ -33,8 +34,18 @@ class ApprovalPromptSanitizationTests {
         String prompt = captured.get().content();
         assertThat(prompt).doesNotContain("ab~+/=cd", "sk-live-value", "hunter2", "abcd", "json-secret",
                 "letmein", "key123", "hide", "13800138000", "138-0013-8000", "138 0013 8000",
-                "user@example.com", "11010519491231002X");
+                "user@example.com", "11010519491231002X", "correct horse battery staple", "horse", "battery",
+                "staple", "sk live value", "live", "value");
         assertThat(prompt).hasSizeLessThan(1300);
+    }
+
+    @Test
+    void preservesOrdinaryChineseApprovalReasonWithoutCredentialAssignment() {
+        AiPromptSanitizer sanitizer = new AiPromptSanitizer();
+
+        String sanitized = sanitizer.sanitizeApprovalReason("因家中突发情况，申请请假两天处理事务。");
+
+        assertThat(sanitized).isEqualTo("因家中突发情况，申请请假两天处理事务。");
     }
 
     private static class NoopMapper implements com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper {
