@@ -2,9 +2,13 @@ package com.tsy.oa.attendance.service;
 
 import com.tsy.oa.attendance.config.AttendanceClockProperties;
 import com.tsy.oa.attendance.dto.AttendanceRecordResponse;
+import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
+import com.tsy.oa.attendance.dto.MakeupQuotaResponse;
+import com.tsy.oa.attendance.employee.EmployeeDirectory;
 import com.tsy.oa.attendance.error.AttendanceErrorCode;
 import com.tsy.oa.attendance.mapper.AttendanceMapper;
 import com.tsy.oa.attendance.model.AttendanceRecord;
+import com.tsy.oa.attendance.model.AttendanceMakeupQuota;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
 import com.tsy.oa.common.error.CommonErrorCode;
@@ -15,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 
 @Service
@@ -26,17 +31,20 @@ public class AttendanceService {
     private final AttendanceMapper attendanceMapper;
     private final AttendanceRedisGuard redisGuard;
     private final AttendanceClockProperties clockProperties;
+    private final EmployeeDirectory employeeDirectory;
     private final Clock clock;
 
     public AttendanceService(
             AttendanceMapper attendanceMapper,
             AttendanceRedisGuard redisGuard,
             AttendanceClockProperties clockProperties,
+            EmployeeDirectory employeeDirectory,
             Clock clock
     ) {
         this.attendanceMapper = attendanceMapper;
         this.redisGuard = redisGuard;
         this.clockProperties = clockProperties;
+        this.employeeDirectory = employeeDirectory;
         this.clock = clock;
     }
 
@@ -121,6 +129,43 @@ public class AttendanceService {
                 .stream()
                 .map(AttendanceRecordResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public MakeupQuotaResponse assignMakeupQuota(
+            Long leaderId,
+            Long employeeId,
+            MakeupQuotaAssignmentRequest request
+    ) {
+        if (!leaderId.equals(employeeDirectory.findDirectLeaderId(employeeId))) {
+            throw new BusinessException(AttendanceErrorCode.NOT_DIRECT_LEADER);
+        }
+        LocalDate quotaMonth = request.quotaMonth().atDay(1);
+        AttendanceMakeupQuota existing = attendanceMapper.findMakeupQuota(
+                employeeId, quotaMonth
+        );
+        if (existing != null && request.totalCount() < existing.getUsedCount()) {
+            throw new BusinessException(AttendanceErrorCode.MAKEUP_QUOTA_BELOW_USED);
+        }
+        AttendanceMakeupQuota quota = new AttendanceMakeupQuota();
+        quota.setEmployeeId(employeeId);
+        quota.setQuotaMonth(quotaMonth);
+        quota.setTotalCount(request.totalCount());
+        quota.setUsedCount(0);
+        quota.setAssignedBy(leaderId);
+        attendanceMapper.upsertMakeupQuota(quota);
+        return getMakeupQuota(employeeId, request.quotaMonth());
+    }
+
+    @Transactional(readOnly = true)
+    public MakeupQuotaResponse getMakeupQuota(Long employeeId, YearMonth quotaMonth) {
+        AttendanceMakeupQuota quota = attendanceMapper.findMakeupQuota(
+                employeeId, quotaMonth.atDay(1)
+        );
+        if (quota == null) {
+            throw new BusinessException(AttendanceErrorCode.RECORD_NOT_FOUND);
+        }
+        return MakeupQuotaResponse.from(quota);
     }
 
     private LockToken acquireLock(Long employeeId, LocalDate date, String operation) {

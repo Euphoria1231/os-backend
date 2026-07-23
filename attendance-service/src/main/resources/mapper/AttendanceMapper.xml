@@ -13,6 +13,17 @@
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
+    <resultMap id="AttendanceMakeupQuotaResultMap" type="com.tsy.oa.attendance.model.AttendanceMakeupQuota">
+        <id property="id" column="id"/>
+        <result property="employeeId" column="employee_id"/>
+        <result property="quotaMonth" column="quota_month"/>
+        <result property="totalCount" column="total_count"/>
+        <result property="usedCount" column="used_count"/>
+        <result property="assignedBy" column="assigned_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO attendance_record (
             employee_id, attendance_date, clock_in_time, attendance_status
@@ -41,5 +52,24 @@
         WHERE employee_id = #{employeeId}
           AND attendance_date BETWEEN #{startDate} AND #{endDate}
         ORDER BY attendance_date DESC
+    </select>
+
+    <insert id="upsertMakeupQuota">
+        INSERT INTO attendance_makeup_quota (
+            employee_id, quota_month, total_count, used_count, assigned_by
+        ) VALUES (
+            #{employeeId}, #{quotaMonth}, #{totalCount}, #{usedCount}, #{assignedBy}
+        )
+        ON DUPLICATE KEY UPDATE
+            total_count = #{totalCount},
+            assigned_by = #{assignedBy},
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+    <select id="findMakeupQuota" resultMap="AttendanceMakeupQuotaResultMap">
+        SELECT id, employee_id, quota_month, total_count, used_count,
+               assigned_by, created_at, updated_at
+        FROM attendance_makeup_quota
+        WHERE employee_id = #{employeeId} AND quota_month = #{quotaMonth}
     </select>
 </mapper>

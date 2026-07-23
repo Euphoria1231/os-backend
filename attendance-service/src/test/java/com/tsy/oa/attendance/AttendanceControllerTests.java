@@ -1,5 +1,6 @@
 package com.tsy.oa.attendance;
 
+import com.tsy.oa.attendance.employee.EmployeeDirectory;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard;
 import com.tsy.oa.attendance.redis.AttendanceRedisGuard.LockToken;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,11 +24,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,10 +53,16 @@ class AttendanceControllerTests {
     @Autowired
     private InMemoryAttendanceRedisGuard redisGuard;
 
+    @Autowired
+    private InMemoryEmployeeDirectory employeeDirectory;
+
     @BeforeEach
     void resetData() {
+        jdbcTemplate.update("DELETE FROM attendance_makeup_quota");
         jdbcTemplate.update("DELETE FROM attendance_record");
         redisGuard.clear();
+        employeeDirectory.clear();
+        employeeDirectory.setLeader(10L, 20L);
         clock.setInstant(Instant.parse("2026-07-20T01:05:00Z"));
     }
 
@@ -113,6 +122,66 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void directLeaderAssignsMonthlyMakeupQuotaAndEmployeeQueriesBalance() throws Exception {
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.employeeId").value(10))
+                .andExpect(jsonPath("$.data.quotaMonth").value("2026-07"))
+                .andExpect(jsonPath("$.data.totalCount").value(5))
+                .andExpect(jsonPath("$.data.usedCount").value(0))
+                .andExpect(jsonPath("$.data.remainingCount").value(5))
+                .andExpect(jsonPath("$.data.assignedBy").value(20));
+
+        mockMvc.perform(get("/api/attendance/makeup-quotas/mine")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .param("quotaMonth", "2026-07"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(5))
+                .andExpect(jsonPath("$.data.usedCount").value(0))
+                .andExpect(jsonPath("$.data.remainingCount").value(5));
+    }
+
+    @Test
+    void rejectsMakeupQuotaAssignmentByNonDirectLeader() throws Exception {
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":5}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40301));
+    }
+
+    @Test
+    void rejectsMakeupQuotaBelowAlreadyUsedCount() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_makeup_quota "
+                        + "(employee_id, quota_month, total_count, used_count, assigned_by) "
+                        + "VALUES (?, ?, ?, ?, ?)",
+                10L, LocalDate.of(2026, 7, 1), 5, 3, 20L
+        );
+
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":2}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40905));
+    }
+
+    @Test
+    void rejectsNonPositiveMakeupQuota() throws Exception {
+        mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType("application/json")
+                        .content("{\"quotaMonth\":\"2026-07\",\"totalCount\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40000));
+    }
+
+    @Test
     void exposesOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs")
                         .header("X-Forwarded-Host", "localhost")
@@ -143,6 +212,12 @@ class AttendanceControllerTests {
         @Primary
         InMemoryAttendanceRedisGuard inMemoryAttendanceRedisGuard() {
             return new InMemoryAttendanceRedisGuard();
+        }
+
+        @Bean
+        @Primary
+        InMemoryEmployeeDirectory inMemoryEmployeeDirectory() {
+            return new InMemoryEmployeeDirectory();
         }
     }
 
@@ -215,6 +290,24 @@ class AttendanceControllerTests {
 
         private String key(Long employeeId, LocalDate date, String operation) {
             return employeeId + ":" + date + ":" + operation;
+        }
+    }
+
+    static class InMemoryEmployeeDirectory implements EmployeeDirectory {
+
+        private final Map<Long, Long> leaders = new ConcurrentHashMap<>();
+
+        @Override
+        public Long findDirectLeaderId(Long employeeId) {
+            return leaders.get(employeeId);
+        }
+
+        void setLeader(Long employeeId, Long leaderId) {
+            leaders.put(employeeId, leaderId);
+        }
+
+        void clear() {
+            leaders.clear();
         }
     }
 }

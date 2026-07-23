@@ -1,6 +1,7 @@
 package com.tsy.oa.attendance.mapper;
 
 import com.tsy.oa.attendance.model.AttendanceRecord;
+import com.tsy.oa.attendance.model.AttendanceMakeupQuota;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -27,5 +28,12 @@ public interface AttendanceMapper {
             @Param("employeeId") Long employeeId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
+    );
+
+    int upsertMakeupQuota(AttendanceMakeupQuota quota);
+
+    AttendanceMakeupQuota findMakeupQuota(
+            @Param("employeeId") Long employeeId,
+            @Param("quotaMonth") LocalDate quotaMonth
     );
 }

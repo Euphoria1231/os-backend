@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -21,6 +23,19 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.resolve(exception.errorCode().code() / 100);
         HttpStatus responseStatus = status == null ? HttpStatus.BAD_REQUEST : status;
         return ResponseEntity.status(responseStatus).body(ApiResponse.failure(exception.errorCode()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleValidationException(
+            MethodArgumentNotValidException exception
+    ) {
+        FieldError fieldError = exception.getBindingResult().getFieldError();
+        String message = fieldError == null
+                ? CommonErrorCode.BAD_REQUEST.message()
+                : fieldError.getDefaultMessage();
+        return ResponseEntity.badRequest().body(
+                ApiResponse.failure(CommonErrorCode.BAD_REQUEST.code(), message)
+        );
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
