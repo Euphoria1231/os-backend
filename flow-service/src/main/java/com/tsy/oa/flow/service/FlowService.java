@@ -2,6 +2,7 @@ package com.tsy.oa.flow.service;
 
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.common.notification.PersonalNotificationEvent;
 import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
 import com.tsy.oa.flow.attendance.AttendanceMakeupGateway.MakeupEligibility;
 import com.tsy.oa.flow.dto.ApplicationRequest;
@@ -19,6 +20,7 @@ import com.tsy.oa.flow.mapper.FlowMapper;
 import com.tsy.oa.flow.mapper.MakeupFlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
 import com.tsy.oa.flow.model.ApprovalTaskRecord;
+import com.tsy.oa.flow.notification.PersonalNotificationPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,17 +43,20 @@ public class FlowService {
     private final MakeupFlowMapper makeupFlowMapper;
     private final EmployeeDirectory employeeDirectory;
     private final AttendanceMakeupGateway attendanceMakeupGateway;
+    private final PersonalNotificationPublisher notificationPublisher;
 
     public FlowService(
             FlowMapper flowMapper,
             MakeupFlowMapper makeupFlowMapper,
             EmployeeDirectory employeeDirectory,
-            AttendanceMakeupGateway attendanceMakeupGateway
+            AttendanceMakeupGateway attendanceMakeupGateway,
+            PersonalNotificationPublisher notificationPublisher
     ) {
         this.flowMapper = flowMapper;
         this.makeupFlowMapper = makeupFlowMapper;
         this.employeeDirectory = employeeDirectory;
         this.attendanceMakeupGateway = attendanceMakeupGateway;
+        this.notificationPublisher = notificationPublisher;
     }
 
     @Transactional
@@ -94,6 +99,7 @@ public class FlowService {
             throw exception;
         }
         insertApprovalTasks(application.getId(), approvalRoute);
+        publishApprovalTask(application, 1, approvalRoute.directLeaderId());
         return toResponse(requireApplication(application.getId()));
     }
 
@@ -184,6 +190,7 @@ public class FlowService {
         application.setStatus(PENDING);
         flowMapper.insertApplication(application);
         insertApprovalTasks(application.getId(), approvalRoute);
+        publishApprovalTask(application, 1, approvalRoute.directLeaderId());
         return toResponse(requireApplication(application.getId()));
     }
 
@@ -230,14 +237,21 @@ public class FlowService {
         boolean makeupApplication = "MAKEUP".equals(application.getApplicationType());
         if (REJECTED.equals(targetStatus)) {
             finishRejectedApplication(applicationId, makeupApplication);
+            publishRejected(application, currentTask.getApprovalLevel());
         } else {
             ApprovalTaskRecord nextTask = flowMapper.findNextWaitingTask(
                     applicationId, currentTask.getApprovalLevel()
             );
             if (nextTask == null) {
                 finishApprovedApplication(application);
+                publishApproved(application);
             } else {
                 activateNextTask(applicationId, nextTask);
+                publishApprovalTask(
+                        application,
+                        nextTask.getApprovalLevel(),
+                        nextTask.getApproverId()
+                );
             }
         }
         return toResponse(requireApplication(applicationId));
@@ -297,6 +311,61 @@ public class FlowService {
                     approvalRoute.departmentLeaderName(), WAITING, null
             );
         }
+    }
+
+    private void publishApprovalTask(
+            FlowApplication application,
+            int approvalLevel,
+            Long approverId
+    ) {
+        notificationPublisher.publish(new PersonalNotificationEvent(
+                "flow:" + application.getId() + ":task:" + approvalLevel,
+                approverId,
+                PersonalNotificationEvent.NotificationType.APPROVAL_TASK,
+                "新的审批待办",
+                applicationTypeLabel(application.getApplicationType())
+                        + "申请 " + application.getApplicationNo() + " 等待您审批",
+                PersonalNotificationEvent.RelatedBusinessType.FLOW_APPLICATION,
+                application.getId(),
+                LocalDateTime.now()
+        ));
+    }
+
+    private void publishRejected(FlowApplication application, int approvalLevel) {
+        notificationPublisher.publish(new PersonalNotificationEvent(
+                "flow:" + application.getId() + ":rejected:" + approvalLevel,
+                application.getApplicantId(),
+                PersonalNotificationEvent.NotificationType.APPLICATION_REJECTED,
+                "申请已被驳回",
+                applicationTypeLabel(application.getApplicationType())
+                        + "申请 " + application.getApplicationNo() + " 已被驳回",
+                PersonalNotificationEvent.RelatedBusinessType.FLOW_APPLICATION,
+                application.getId(),
+                LocalDateTime.now()
+        ));
+    }
+
+    private void publishApproved(FlowApplication application) {
+        notificationPublisher.publish(new PersonalNotificationEvent(
+                "flow:" + application.getId() + ":approved",
+                application.getApplicantId(),
+                PersonalNotificationEvent.NotificationType.APPLICATION_APPROVED,
+                "申请已批准",
+                applicationTypeLabel(application.getApplicationType())
+                        + "申请 " + application.getApplicationNo() + " 已通过全部审批",
+                PersonalNotificationEvent.RelatedBusinessType.FLOW_APPLICATION,
+                application.getId(),
+                LocalDateTime.now()
+        ));
+    }
+
+    private String applicationTypeLabel(String applicationType) {
+        return switch (applicationType) {
+            case "LEAVE" -> "请假";
+            case "OVERTIME" -> "加班";
+            case "MAKEUP" -> "补签";
+            default -> "办公";
+        };
     }
 
     private FlowApplicationResponse toResponse(FlowApplication application) {

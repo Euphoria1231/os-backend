@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.common.log.BusinessOperationLogger;
 import com.tsy.oa.common.log.OperationLogCommand;
+import com.tsy.oa.common.notification.PersonalNotificationEvent;
 import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
+import com.tsy.oa.flow.notification.PersonalNotificationPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +64,9 @@ class FlowControllerTests {
     @Autowired
     private RecordedOperationLogs operationLogs;
 
+    @Autowired
+    private RecordingPersonalNotificationPublisher notificationPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
@@ -71,6 +76,7 @@ class FlowControllerTests {
         employeeDirectory.setApprovalRoute(10L, 20L, 30L);
         attendanceMakeupGateway.clear();
         operationLogs.clear();
+        notificationPublisher.clear();
         attendanceMakeupGateway.allow(
                 1L, 10L, LocalDate.of(2026, 7, 20), 5
         );
@@ -122,6 +128,11 @@ class FlowControllerTests {
 
         assertEquals(1, operationLogs.count("SUBMIT_LEAVE", "SUCCESS"));
         assertEquals(2, operationLogs.count("APPROVE_APPLICATION", "SUCCESS"));
+        assertEquals(List.of(
+                "flow:" + applicationId + ":task:1:20:APPROVAL_TASK",
+                "flow:" + applicationId + ":task:2:30:APPROVAL_TASK",
+                "flow:" + applicationId + ":approved:10:APPLICATION_APPROVED"
+        ), notificationPublisher.summaries());
     }
 
     @Test
@@ -151,6 +162,28 @@ class FlowControllerTests {
 
         assertEquals(1, operationLogs.count("SUBMIT_OVERTIME", "SUCCESS"));
         assertEquals(1, operationLogs.count("REJECT_APPLICATION", "SUCCESS"));
+        assertEquals(List.of(
+                "flow:" + applicationId + ":task:1:20:APPROVAL_TASK",
+                "flow:" + applicationId + ":rejected:1:10:APPLICATION_REJECTED"
+        ), notificationPublisher.summaries());
+    }
+
+    @Test
+    void rollsBackSubmissionWhenRocketMqPublishingFails() throws Exception {
+        notificationPublisher.failNext();
+
+        mockMvc.perform(post("/api/flow/applications/leave")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(applicationJson("家庭事务")))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(50000));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flow_application",
+                Integer.class
+        ));
+        assertEquals(1, operationLogs.count("SUBMIT_LEAVE", "FAILURE"));
     }
 
     @Test
@@ -266,6 +299,11 @@ class FlowControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("APPROVED"))
                 .andExpect(jsonPath("$.data.approvalProgress.length()").value(1));
+
+        assertEquals(List.of(
+                "flow:" + applicationId + ":task:1:20:APPROVAL_TASK",
+                "flow:" + applicationId + ":approved:10:APPLICATION_APPROVED"
+        ), notificationPublisher.summaries());
     }
 
     @Test
@@ -452,6 +490,12 @@ class FlowControllerTests {
                     }
             );
         }
+
+        @Bean
+        @Primary
+        RecordingPersonalNotificationPublisher recordingPersonalNotificationPublisher() {
+            return new RecordingPersonalNotificationPublisher();
+        }
     }
 
     static class InMemoryEmployeeDirectory implements EmployeeDirectory {
@@ -556,6 +600,38 @@ class FlowControllerTests {
 
         void clear() {
             commands.clear();
+        }
+    }
+
+    static class RecordingPersonalNotificationPublisher implements PersonalNotificationPublisher {
+
+        private final List<PersonalNotificationEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private boolean failNext;
+
+        @Override
+        public void publish(PersonalNotificationEvent event) {
+            if (failNext) {
+                failNext = false;
+                throw new IllegalStateException("RocketMQ unavailable");
+            }
+            events.add(event);
+        }
+
+        List<String> summaries() {
+            return events.stream()
+                    .map(event -> event.eventId()
+                            + ":" + event.recipientEmployeeId()
+                            + ":" + event.notificationType())
+                    .toList();
+        }
+
+        void failNext() {
+            failNext = true;
+        }
+
+        void clear() {
+            events.clear();
+            failNext = false;
         }
     }
 }

@@ -33,6 +33,14 @@ spring:
             connect-timeout: 3000
             read-timeout: 5000
 
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+
+oa:
+  notification:
+    events:
+      topic: ${PERSONAL_NOTIFICATION_EVENTS_TOPIC:oa-personal-notification-events}
+
 mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
