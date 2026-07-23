@@ -49,6 +49,11 @@ class AiAnalysisControllerWebTests {
         mockMvc.perform(post("/api/intelligence/ai/office/ask").header("X-Employee-Id", "0")
                         .contentType("application/json").content("{\"question\":\"制度\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
+        mockMvc.perform(post("/api/intelligence/ai/office/ask")
+                        .contentType("application/json").content("{\"question\":\"制度\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
+        mockMvc.perform(post("/api/intelligence/ai/approvals/not-a-number/analysis").header("X-Employee-Id", "1"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(40000));
     }
 
     @Test
