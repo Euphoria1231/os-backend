@@ -48,10 +48,10 @@ public class AttendanceAnalysisService {
 
     private YearMonth parseMonth(String month) {
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
-            throw new IllegalArgumentException("month must use YYYY-MM");
+            throw new BusinessException(CommonErrorCode.BAD_REQUEST);
         }
         try { return YearMonth.parse(month, DateTimeFormatter.ofPattern("yyyy-MM")); }
-        catch (DateTimeParseException exception) { throw new IllegalArgumentException("month must use YYYY-MM", exception); }
+        catch (DateTimeParseException exception) { throw new BusinessException(CommonErrorCode.BAD_REQUEST); }
     }
     private boolean hasRole(List<String> roles, String role) { return roles != null && roles.stream().anyMatch(role::equals); }
 }

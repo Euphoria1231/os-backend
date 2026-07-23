@@ -5,6 +5,8 @@ import com.tsy.oa.intelligence.ai.AiProvider;
 import com.tsy.oa.intelligence.ai.model.AiCallResult;
 import com.tsy.oa.intelligence.ai.model.AiCallStatus;
 import com.tsy.oa.intelligence.ai.model.AiPrompt;
+import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord;
+import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +29,9 @@ class AiAnalysisServicePersistenceTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private AiAnalysisRecordMapper recordMapper;
+
     @BeforeEach
     void setUp() {
         jdbcTemplate.update("DELETE FROM ai_analysis_record");
@@ -34,14 +39,15 @@ class AiAnalysisServicePersistenceTests {
 
     @Test
     void recordsOnlyAuditableMetadataAndReferenceOnlySummary() {
-        String sensitivePrompt = "Do not persist this sensitive prompt";
-        var result = service.analyze(new AiAnalysisRequest(
+        String sensitivePrompt = "Do not persist this sensitive prompt SECRET_PROMPT";
+        var result = service.analyzeAndRecord(new AiAnalysisRequest(
                 "ATTENDANCE",
                 "attendance-42",
+                42L,
                 sensitivePrompt
         ));
 
-        assertThat(result.status()).isEqualTo(AiCallStatus.SUCCESS);
+        assertThat(result.result().status()).isEqualTo(AiCallStatus.SUCCESS);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT request_type FROM ai_analysis_record WHERE business_reference_id = ?",
                 String.class,
@@ -57,7 +63,7 @@ class AiAnalysisServicePersistenceTests {
                 String.class,
                 "attendance-42"
         );
-        assertThat(resultSummary).contains("仅供参考").doesNotContain(sensitivePrompt);
+        assertThat(resultSummary).contains("仅供参考").doesNotContain(sensitivePrompt, "SECRET_DISPLAY");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT business_reference_id FROM ai_analysis_record WHERE request_type = ?",
                 String.class,
@@ -80,6 +86,26 @@ class AiAnalysisServicePersistenceTests {
         )).isZero();
     }
 
+    @Test
+    void insertsAndHydratesCompleteAuditRecordThroughRealMyBatisMapper() {
+        AiAnalysisRecord inserted = new AiAnalysisRecord("APPROVAL", "99", 7L, "FAILED", 12L,
+                "仅供参考：APPROVAL AI analysis failed.", java.time.LocalDateTime.of(2026, 7, 23, 9, 0));
+
+        recordMapper.insert(inserted);
+        AiAnalysisRecord found = recordMapper.findById(inserted.getId());
+
+        assertThat(inserted.getId()).isPositive();
+        assertThat(found).isNotNull();
+        assertThat(found.getId()).isEqualTo(inserted.getId());
+        assertThat(found.getRequestType()).isEqualTo("APPROVAL");
+        assertThat(found.getBusinessReferenceId()).isEqualTo("99");
+        assertThat(found.getInitiatorEmployeeId()).isEqualTo(7L);
+        assertThat(found.getStatus()).isEqualTo("FAILED");
+        assertThat(found.getDurationMs()).isEqualTo(12L);
+        assertThat(found.getResultSummary()).isEqualTo("仅供参考：APPROVAL AI analysis failed.");
+        assertThat(found.getAuditedAt()).isEqualTo(java.time.LocalDateTime.of(2026, 7, 23, 9, 0));
+    }
+
     @TestConfiguration
     static class TestBeans {
 
@@ -88,7 +114,7 @@ class AiAnalysisServicePersistenceTests {
         AiProvider testAiProvider() {
             return (AiPrompt prompt) -> new AiCallResult(
                     AiCallStatus.SUCCESS,
-                    prompt.content()
+                    "model output SECRET_DISPLAY"
             );
         }
     }

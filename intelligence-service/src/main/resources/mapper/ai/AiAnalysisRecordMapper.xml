@@ -4,6 +4,19 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper">
 
+    <resultMap id="aiAnalysisRecordMap" type="com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord">
+        <constructor>
+            <idArg column="id" javaType="java.lang.Long"/>
+            <arg column="request_type" javaType="java.lang.String"/>
+            <arg column="business_reference_id" javaType="java.lang.String"/>
+            <arg column="initiator_employee_id" javaType="java.lang.Long"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="duration_ms" javaType="java.lang.Long"/>
+            <arg column="result_summary" javaType="java.lang.String"/>
+            <arg column="audited_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ai_analysis_record (
             request_type,
@@ -24,7 +37,7 @@
         )
     </insert>
 
-    <select id="findById" resultType="com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord">
+    <select id="findById" resultMap="aiAnalysisRecordMap">
         SELECT id, request_type, business_reference_id, initiator_employee_id, status, duration_ms, result_summary, audited_at
         FROM ai_analysis_record WHERE id = #{id}
     </select>

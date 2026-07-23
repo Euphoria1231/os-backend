@@ -12,15 +12,19 @@ public class AiAnalysisRecord {
     private final String resultSummary;
     private final LocalDateTime auditedAt;
 
-    public AiAnalysisRecord(String requestType, String businessReferenceId, String status, long durationMs,
-                            String resultSummary, LocalDateTime auditedAt) {
-        this(requestType, businessReferenceId, 0L, status, durationMs, resultSummary, auditedAt);
-    }
     public AiAnalysisRecord(String requestType, String businessReferenceId, long initiatorEmployeeId, String status,
                             long durationMs, String resultSummary, LocalDateTime auditedAt) {
+        if (initiatorEmployeeId <= 0) {
+            throw new IllegalArgumentException("initiatorEmployeeId must be positive");
+        }
         this.requestType = requestType; this.businessReferenceId = businessReferenceId;
         this.initiatorEmployeeId = initiatorEmployeeId; this.status = status; this.durationMs = durationMs;
         this.resultSummary = resultSummary; this.auditedAt = auditedAt;
+    }
+    public AiAnalysisRecord(Long id, String requestType, String businessReferenceId, Long initiatorEmployeeId,
+                            String status, Long durationMs, String resultSummary, LocalDateTime auditedAt) {
+        this(requestType, businessReferenceId, initiatorEmployeeId, status, durationMs, resultSummary, auditedAt);
+        this.id = id;
     }
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

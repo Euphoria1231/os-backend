@@ -1,11 +1,14 @@
 package com.tsy.oa.intelligence.ai.analysis;
 
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.common.error.CommonErrorCode;
+import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.intelligence.ai.AiProvider;
 import com.tsy.oa.intelligence.ai.model.AiCallResult;
 import com.tsy.oa.intelligence.ai.model.AiCallStatus;
 import com.tsy.oa.intelligence.ai.model.AiPrompt;
 import com.tsy.oa.intelligence.ai.service.AiAnalysisService;
+import com.tsy.oa.intelligence.ai.service.AiAnalysisRequest;
 import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord;
 import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient;
 import org.junit.jupiter.api.Test;
@@ -50,6 +53,23 @@ class Task6IntelligenceAnalysisTests {
     }
 
     @Test
+    void approvalAnalysisAllowsCurrentApproverAndSuperAdminAndPreservesProviderStatuses() {
+        ApprovalAnalysisService service = new ApprovalAnalysisService(
+                applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
+                        applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
+                analysisService(AiCallStatus.SUCCESS, "可作为补充意见")
+        );
+        assertThat(service.analyze(99L, 20L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
+        assertThat(service.analyze(99L, 1L, List.of("SUPER_ADMIN")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
+        ApprovalAnalysisService failed = new ApprovalAnalysisService(
+                applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
+                        applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
+                analysisService(AiCallStatus.FAILED, "upstream failure")
+        );
+        assertThat(failed.analyze(99L, 10L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.FAILED);
+    }
+
+    @Test
     void attendanceAnalysisUsesOnlyReturnedExplicitAbnormalStatusesAndValidatesMonth() {
         AttendanceAnalysisService service = new AttendanceAnalysisService(
                 (employeeId, startDate, endDate) -> List.of(
@@ -64,7 +84,25 @@ class Task6IntelligenceAnalysisTests {
         assertThat(response.riskLevel()).isEqualTo("MEDIUM");
         assertThat(response.abnormalSummary()).contains("LATE", "MISSING_CLOCK_OUT");
         assertThatThrownBy(() -> service.analyze(10L, 10L, List.of(), "2026-7"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void attendanceAnalysisUsesFirstAndLastNaturalDayAndRejectsOtherEmployee() {
+        final LocalDate[] range = new LocalDate[2];
+        AttendanceAnalysisService service = new AttendanceAnalysisService(
+                (employeeId, startDate, endDate) -> { range[0] = startDate; range[1] = endDate; return List.of(); },
+                failingAiAnalysisService()
+        );
+        service.analyze(10L, 10L, List.of("EMPLOYEE"), "2026-02");
+        assertThat(range[0]).isEqualTo(LocalDate.of(2026, 2, 1));
+        assertThat(range[1]).isEqualTo(LocalDate.of(2026, 2, 28));
+        assertThatThrownBy(() -> service.analyze(10L, 11L, List.of("DEPARTMENT_MANAGER"), "2026-02"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -75,7 +113,31 @@ class Task6IntelligenceAnalysisTests {
 
         assertThat(response.callStatus()).isEqualTo(AiCallStatus.DEGRADED);
         assertThat(response.answer()).contains("仅供参考", "考勤");
-        assertThatThrownBy(() -> new OfficeQuestionRequest(" ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OfficeQuestionRequest(" "))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void feignApprovalSourceDistinguishesNotFoundFromUpstreamFailure() {
+        ApplicationSearchSourceClient notFoundClient = applicationId -> ApiResponse.failure(CommonErrorCode.NOT_FOUND);
+        ApplicationSearchSourceClient failedClient = applicationId -> ApiResponse.failure(CommonErrorCode.INTERNAL_SERVER_ERROR);
+
+        assertThat(new FeignApplicationAnalysisSource(notFoundClient).findById(99L)).isNull();
+        assertThatThrownBy(() -> new FeignApplicationAnalysisSource(failedClient).findById(99L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void analysisRequestRejectsUnattributableInitiator() {
+        assertThatThrownBy(() -> new AiAnalysisRequest("APPROVAL", "99", 0L, "safe prompt"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+        assertThatThrownBy(() -> new AiAnalysisRecord("APPROVAL", "99", 0L, "SUCCESS", 1L,
+                "仅供参考：controlled summary", LocalDateTime.now()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -95,7 +157,11 @@ class Task6IntelligenceAnalysisTests {
     }
 
     private AiAnalysisService failingAiAnalysisService() {
-        AiProvider provider = (AiPrompt prompt) -> new AiCallResult(AiCallStatus.DEGRADED, "AI unavailable");
+        return analysisService(AiCallStatus.DEGRADED, "AI unavailable");
+    }
+
+    private AiAnalysisService analysisService(AiCallStatus status, String displayText) {
+        AiProvider provider = (AiPrompt prompt) -> new AiCallResult(status, displayText);
         return new AiAnalysisService(provider, new com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecordMapper() {
             @Override public int insert(com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord record) { record.setId(1L); return 1; }
             @Override public com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord findById(long id) { return null; }
