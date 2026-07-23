@@ -19,7 +19,7 @@ public class FlowApprovedLeaveProvider implements ApprovedLeaveProvider {
     public List<ApprovedLeave> findApprovedLeaves(LocalDate date) {
         ApiResponse<List<ApprovedLeave>> response;
         try {
-            response = client.findApprovedLeaves(date);
+            response = client.findApprovedLeaves(date.toString());
         } catch (RuntimeException exception) {
             throw new ApprovedLeaveUnavailableException("审批服务不可用", exception);
         }

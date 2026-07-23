@@ -9,6 +9,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 class FlowApprovedLeaveProviderTests {
 
     private static final LocalDate WORK_DATE = LocalDate.of(2026, 7, 21);
@@ -29,5 +32,19 @@ class FlowApprovedLeaveProviderTests {
         FlowApprovedLeaveProvider provider = new FlowApprovedLeaveProvider(client);
 
         assertThat(provider.findApprovedLeaves(WORK_DATE)).containsExactly(leave);
+    }
+    @Test
+    void sendsApprovedLeaveDateInIsoFormat() {
+        FlowApprovedLeaveClient client = mock(FlowApprovedLeaveClient.class);
+        FlowApprovedLeaveProvider provider = new FlowApprovedLeaveProvider(client);
+
+        when(client.findApprovedLeaves("2026-07-21"))
+                .thenReturn(ApiResponse.success(List.of()));
+
+        List<ApprovedLeave> result =
+                provider.findApprovedLeaves(LocalDate.of(2026, 7, 21));
+
+        assertThat(result).isEmpty();
+        verify(client).findApprovedLeaves("2026-07-21");
     }
 }
