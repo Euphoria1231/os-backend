@@ -16,6 +16,8 @@ public interface NoticeMapper {
 
     int softDeletePublished(Long id);
 
+    Long findSearchVersionById(Long id);
+
     Notice findPublishedById(Long id);
 
     List<NoticeView> findPublishedForEmployee(Long employeeId);

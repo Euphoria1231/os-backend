@@ -11,6 +11,7 @@
         <result property="publishedAt" column="published_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="searchVersion" column="search_version"/>
     </resultMap>
 
     <resultMap id="NoticeViewResultMap" type="com.tsy.oa.notice.model.NoticeView" extends="NoticeResultMap">
@@ -20,7 +21,7 @@
 
     <sql id="NoticeColumns">
         n.id, n.title, n.content, n.publisher_id, n.status,
-        n.published_at, n.created_at, n.updated_at
+        n.published_at, n.created_at, n.updated_at, n.search_version
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
@@ -32,6 +33,7 @@
         UPDATE notice
         SET title = #{title},
             content = #{content},
+            search_version = search_version + 1,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id} AND status = 'PUBLISHED'
     </update>
@@ -39,9 +41,14 @@
     <update id="softDeletePublished">
         UPDATE notice
         SET status = 'DELETED',
+            search_version = search_version + 1,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id} AND status = 'PUBLISHED'
     </update>
+
+    <select id="findSearchVersionById" resultType="long">
+        SELECT search_version FROM notice WHERE id = #{id}
+    </select>
 
     <select id="findPublishedById" resultMap="NoticeResultMap">
         SELECT <include refid="NoticeColumns"/>

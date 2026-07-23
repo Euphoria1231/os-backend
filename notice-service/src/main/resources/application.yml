@@ -36,6 +36,9 @@ oa:
       enabled: ${PERSONAL_NOTIFICATION_EVENTS_ENABLED:true}
       topic: ${PERSONAL_NOTIFICATION_EVENTS_TOPIC:oa-personal-notification-events}
       consumer-group: ${PERSONAL_NOTIFICATION_EVENTS_CONSUMER_GROUP:notice-personal-notification-consumer}
+  search:
+    events:
+      topic: ${SEARCH_INDEX_EVENTS_TOPIC:oa-search-index-events}
 
 mybatis:
   mapper-locations: classpath:/mapper/**/*.xml

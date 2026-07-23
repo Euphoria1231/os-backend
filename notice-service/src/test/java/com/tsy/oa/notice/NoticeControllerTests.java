@@ -6,6 +6,8 @@ import com.tsy.oa.common.log.BusinessOperationLogger;
 import com.tsy.oa.common.log.OperationLogCommand;
 import com.tsy.oa.common.notification.PersonalNotificationEvent;
 import com.tsy.oa.notice.event.PersonalNotificationEventHandler;
+import com.tsy.oa.notice.search.SearchIndexEvent;
+import com.tsy.oa.notice.search.SearchIndexEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,12 +59,16 @@ class NoticeControllerTests {
     @Autowired
     private PersonalNotificationEventHandler notificationEventHandler;
 
+    @Autowired
+    private RecordedSearchIndexEvents searchIndexEvents;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM personal_notification");
         jdbcTemplate.update("DELETE FROM notice_read");
         jdbcTemplate.update("DELETE FROM notice");
         operationLogs.clear();
+        searchIndexEvents.clear();
     }
 
     @Test
@@ -260,6 +266,75 @@ class NoticeControllerTests {
     }
 
     @Test
+    void publishesVersionedSearchIndexEventsForNoticeChanges() throws Exception {
+        long noticeId = publishNotice();
+
+        mockMvc.perform(put("/api/notices/{id}", noticeId)
+                        .header(EMPLOYEE_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new NoticePayload(
+                                "国庆节放假安排（更新）",
+                                "公司国庆节放假安排已经更新。"
+                        ))))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/notices/{id}", noticeId)
+                        .header(EMPLOYEE_HEADER, "1"))
+                .andExpect(status().isOk());
+
+        assertEquals(List.of(
+                new SearchIndexEvent(
+                        "notice:" + noticeId + ":v:1",
+                        SearchIndexEvent.AggregateType.NOTICE,
+                        SearchIndexEvent.Operation.UPSERT,
+                        noticeId,
+                        1L,
+                        null
+                ),
+                new SearchIndexEvent(
+                        "notice:" + noticeId + ":v:2",
+                        SearchIndexEvent.AggregateType.NOTICE,
+                        SearchIndexEvent.Operation.UPSERT,
+                        noticeId,
+                        2L,
+                        null
+                ),
+                new SearchIndexEvent(
+                        "notice:" + noticeId + ":v:3",
+                        SearchIndexEvent.AggregateType.NOTICE,
+                        SearchIndexEvent.Operation.DELETE,
+                        noticeId,
+                        3L,
+                        null
+                )
+        ), searchIndexEvents.events());
+        assertEquals(3L, jdbcTemplate.queryForObject(
+                "SELECT search_version FROM notice WHERE id = ?",
+                Long.class,
+                noticeId
+        ));
+    }
+
+    @Test
+    void rollsBackNoticePublishWhenSearchIndexEventCannotBeSent() throws Exception {
+        searchIndexEvents.failNext(new IllegalStateException("RocketMQ unavailable"));
+
+        mockMvc.perform(post("/api/notices")
+                        .header(EMPLOYEE_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new NoticePayload(
+                                "公告标题",
+                                "公告正文"
+                        ))))
+                .andExpect(status().isInternalServerError());
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM notice",
+                Integer.class
+        ));
+        assertTrue(searchIndexEvents.events().isEmpty());
+    }
+
+    @Test
     void recordsFailedUpdateAndDeleteForMissingNotice() throws Exception {
         mockMvc.perform(put("/api/notices/{id}", 999L)
                         .header(EMPLOYEE_HEADER, "1")
@@ -388,6 +463,12 @@ class NoticeControllerTests {
                     }
             );
         }
+
+        @Bean
+        @Primary
+        RecordedSearchIndexEvents recordedSearchIndexEvents() {
+            return new RecordedSearchIndexEvents();
+        }
     }
 
     static class RecordedOperationLogs {
@@ -407,6 +488,35 @@ class NoticeControllerTests {
 
         void clear() {
             commands.clear();
+        }
+    }
+
+    static class RecordedSearchIndexEvents implements SearchIndexEventPublisher {
+
+        private final List<SearchIndexEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private RuntimeException nextFailure;
+
+        @Override
+        public void publish(SearchIndexEvent event) {
+            if (nextFailure != null) {
+                RuntimeException failure = nextFailure;
+                nextFailure = null;
+                throw failure;
+            }
+            events.add(event);
+        }
+
+        List<SearchIndexEvent> events() {
+            return List.copyOf(events);
+        }
+
+        void failNext(RuntimeException failure) {
+            nextFailure = failure;
+        }
+
+        void clear() {
+            events.clear();
+            nextFailure = null;
         }
     }
 }

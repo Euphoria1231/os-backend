@@ -10,6 +10,8 @@ import com.tsy.oa.notice.error.NoticeErrorCode;
 import com.tsy.oa.notice.mapper.NoticeMapper;
 import com.tsy.oa.notice.model.Notice;
 import com.tsy.oa.notice.model.NoticeView;
+import com.tsy.oa.notice.search.SearchIndexEvent;
+import com.tsy.oa.notice.search.SearchIndexEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,9 +24,14 @@ public class NoticeService {
     private static final String PUBLISHED = "PUBLISHED";
 
     private final NoticeMapper noticeMapper;
+    private final SearchIndexEventPublisher searchIndexEventPublisher;
 
-    public NoticeService(NoticeMapper noticeMapper) {
+    public NoticeService(
+            NoticeMapper noticeMapper,
+            SearchIndexEventPublisher searchIndexEventPublisher
+    ) {
         this.noticeMapper = noticeMapper;
+        this.searchIndexEventPublisher = searchIndexEventPublisher;
     }
 
     @Transactional
@@ -36,7 +43,9 @@ public class NoticeService {
         notice.setStatus(PUBLISHED);
         notice.setPublishedAt(LocalDateTime.now());
         noticeMapper.insert(notice);
-        return NoticeResponse.from(requirePublishedNotice(notice.getId()));
+        Notice publishedNotice = requirePublishedNotice(notice.getId());
+        publishSearchIndexEvent(publishedNotice, SearchIndexEvent.Operation.UPSERT);
+        return NoticeResponse.from(publishedNotice);
     }
 
     @Transactional
@@ -48,7 +57,9 @@ public class NoticeService {
         if (noticeMapper.updatePublished(notice) != 1) {
             throw new BusinessException(NoticeErrorCode.NOTICE_NOT_FOUND);
         }
-        return NoticeResponse.from(requirePublishedNotice(noticeId));
+        Notice updatedNotice = requirePublishedNotice(noticeId);
+        publishSearchIndexEvent(updatedNotice, SearchIndexEvent.Operation.UPSERT);
+        return NoticeResponse.from(updatedNotice);
     }
 
     @Transactional
@@ -56,6 +67,11 @@ public class NoticeService {
         if (noticeMapper.softDeletePublished(noticeId) != 1) {
             throw new BusinessException(NoticeErrorCode.NOTICE_NOT_FOUND);
         }
+        publishSearchIndexEvent(
+                noticeId,
+                noticeMapper.findSearchVersionById(noticeId),
+                SearchIndexEvent.Operation.DELETE
+        );
     }
 
     @Transactional(readOnly = true)
@@ -118,5 +134,27 @@ public class NoticeService {
             throw new BusinessException(NoticeErrorCode.NOTICE_NOT_FOUND);
         }
         return notice;
+    }
+
+    private void publishSearchIndexEvent(Notice notice, SearchIndexEvent.Operation operation) {
+        publishSearchIndexEvent(notice.getId(), notice.getSearchVersion(), operation);
+    }
+
+    private void publishSearchIndexEvent(
+            Long noticeId,
+            Long searchVersion,
+            SearchIndexEvent.Operation operation
+    ) {
+        if (noticeId == null || searchVersion == null) {
+            throw new IllegalStateException("Notice search event version is unavailable");
+        }
+        searchIndexEventPublisher.publish(new SearchIndexEvent(
+                "notice:" + noticeId + ":v:" + searchVersion,
+                SearchIndexEvent.AggregateType.NOTICE,
+                operation,
+                noticeId,
+                searchVersion,
+                null
+        ));
     }
 }
