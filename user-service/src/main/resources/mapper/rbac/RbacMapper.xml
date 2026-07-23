@@ -130,6 +130,13 @@
     <delete id="deleteRoleMenus">DELETE FROM role_menu WHERE role_id = #{roleId}</delete>
     <delete id="deleteMenuRoles">DELETE FROM role_menu WHERE menu_id = #{menuId}</delete>
 
+    <select id="findMenuIdsByRoleId" resultType="long">
+        SELECT menu_id
+        FROM role_menu
+        WHERE role_id = #{roleId}
+        ORDER BY menu_id
+    </select>
+
     <insert id="insertRoleApiPermission">
         INSERT INTO role_api_permission (role_id, api_permission_id)
         VALUES (#{roleId}, #{apiPermissionId})
@@ -142,6 +149,13 @@
     <delete id="deleteApiPermissionRoles">
         DELETE FROM role_api_permission WHERE api_permission_id = #{apiPermissionId}
     </delete>
+
+    <select id="findApiPermissionIdsByRoleId" resultType="long">
+        SELECT api_permission_id
+        FROM role_api_permission
+        WHERE role_id = #{roleId}
+        ORDER BY api_permission_id
+    </select>
 
     <insert id="insertEmployeeRole">
         INSERT INTO employee_role (employee_id, role_id) VALUES (#{employeeId}, #{roleId})

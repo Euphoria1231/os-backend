@@ -2,6 +2,7 @@ package com.tsy.oa.user.rbac.controller;
 
 import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.user.rbac.dto.RoleGrantRequest;
+import com.tsy.oa.user.rbac.dto.RoleGrantResponse;
 import com.tsy.oa.user.rbac.dto.RoleRequest;
 import com.tsy.oa.user.rbac.dto.RoleResponse;
 import com.tsy.oa.user.rbac.service.RbacService;
@@ -57,6 +58,11 @@ public class RoleController {
     ) {
         rbacService.assignRolePermissions(id, request);
         return ApiResponse.success(null);
+    }
+
+    @GetMapping("/{id}/permissions")
+    public ApiResponse<RoleGrantResponse> getPermissions(@PathVariable Long id) {
+        return ApiResponse.success(rbacService.getRolePermissions(id));
     }
 
     @DeleteMapping("/{id}")

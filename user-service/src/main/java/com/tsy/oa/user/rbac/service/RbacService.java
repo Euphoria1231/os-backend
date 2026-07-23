@@ -10,6 +10,7 @@ import com.tsy.oa.user.rbac.dto.EmployeeRoleRequest;
 import com.tsy.oa.user.rbac.dto.MenuRequest;
 import com.tsy.oa.user.rbac.dto.MenuResponse;
 import com.tsy.oa.user.rbac.dto.RoleGrantRequest;
+import com.tsy.oa.user.rbac.dto.RoleGrantResponse;
 import com.tsy.oa.user.rbac.dto.RoleRequest;
 import com.tsy.oa.user.rbac.dto.RoleResponse;
 import com.tsy.oa.user.rbac.mapper.RbacMapper;
@@ -156,6 +157,15 @@ public class RbacService {
         rbacMapper.deleteRoleApiPermissions(roleId);
         menuIds.forEach(menuId -> rbacMapper.insertRoleMenu(roleId, menuId));
         apiPermissionIds.forEach(permissionId -> rbacMapper.insertRoleApiPermission(roleId, permissionId));
+    }
+
+    @Transactional(readOnly = true)
+    public RoleGrantResponse getRolePermissions(Long roleId) {
+        requireRole(roleId);
+        return new RoleGrantResponse(
+                rbacMapper.findMenuIdsByRoleId(roleId),
+                rbacMapper.findApiPermissionIdsByRoleId(roleId)
+        );
     }
 
     @Transactional

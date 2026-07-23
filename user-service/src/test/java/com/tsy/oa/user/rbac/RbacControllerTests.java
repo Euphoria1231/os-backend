@@ -122,6 +122,27 @@ class RbacControllerTests {
     }
 
     @Test
+    void returnsCurrentRoleGrantIds() throws Exception {
+        long roleId = createAndReadId("/api/user/roles", roleJson("ADMIN", "系统管理员"));
+        long menuId = createAndReadId("/api/user/menus", menuJson("员工管理", "/employees"));
+        long apiPermissionId = createAndReadId(
+                "/api/user/api-permissions",
+                apiPermissionJson("USER_EMPLOYEE_READ", "GET", "/api/user/employees/**")
+        );
+        mockMvc.perform(put("/api/user/roles/{id}/permissions", roleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RoleGrantPayload(
+                                List.of(menuId), List.of(apiPermissionId)
+                        ))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/user/roles/{id}/permissions", roleId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.menuIds[0]").value(menuId))
+                .andExpect(jsonPath("$.data.apiPermissionIds[0]").value(apiPermissionId));
+    }
+
+    @Test
     void loginTokenContainsAssignedRolesAndApiPermissions() throws Exception {
         jdbcTemplate.update("INSERT INTO sys_role (id, code, name, status) VALUES (1, 'ADMIN', '系统管理员', 1)");
         jdbcTemplate.update(

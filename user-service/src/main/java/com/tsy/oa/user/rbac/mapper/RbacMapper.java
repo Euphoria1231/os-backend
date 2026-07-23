@@ -34,12 +34,14 @@ public interface RbacMapper {
     int insertRoleMenu(@Param("roleId") Long roleId, @Param("menuId") Long menuId);
     int deleteRoleMenus(Long roleId);
     int deleteMenuRoles(Long menuId);
+    List<Long> findMenuIdsByRoleId(Long roleId);
     int insertRoleApiPermission(
             @Param("roleId") Long roleId,
             @Param("apiPermissionId") Long apiPermissionId
     );
     int deleteRoleApiPermissions(Long roleId);
     int deleteApiPermissionRoles(Long apiPermissionId);
+    List<Long> findApiPermissionIdsByRoleId(Long roleId);
     int insertEmployeeRole(@Param("employeeId") Long employeeId, @Param("roleId") Long roleId);
     int deleteEmployeeRoles(Long employeeId);
     int deleteRoleEmployees(Long roleId);
