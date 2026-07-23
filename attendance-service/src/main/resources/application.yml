@@ -41,9 +41,16 @@ mybatis:
 attendance:
   clock:
     work-start-time: ${ATTENDANCE_WORK_START_TIME:09:00}
+    morning-end-time: ${ATTENDANCE_MORNING_END_TIME:12:00}
+    afternoon-start-time: ${ATTENDANCE_AFTERNOON_START_TIME:14:00}
+    work-end-time: ${ATTENDANCE_WORK_END_TIME:17:00}
     late-threshold-minutes: ${ATTENDANCE_LATE_THRESHOLD_MINUTES:0}
     lock-ttl: ${ATTENDANCE_LOCK_TTL:PT10S}
     completed-marker-ttl: ${ATTENDANCE_COMPLETED_MARKER_TTL:PT36H}
+  geofence:
+    center-longitude: ${ATTENDANCE_CENTER_LONGITUDE:119.411209}
+    center-latitude: ${ATTENDANCE_CENTER_LATITUDE:26.022543}
+    radius-meters: ${ATTENDANCE_RADIUS_METERS:500}
 
 management:
   endpoints:

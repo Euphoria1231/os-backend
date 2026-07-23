@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -41,6 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AttendanceControllerTests {
 
     private static final String EMPLOYEE_HEADER = "X-Employee-Id";
+    private static final String CENTER_LOCATION =
+            "{\"longitude\":119.411209,\"latitude\":26.022543}";
 
     @Autowired
     private MockMvc mockMvc;
@@ -69,15 +72,76 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void returnsConfiguredWorkPeriodsAndClockArea() throws Exception {
+        mockMvc.perform(get("/api/attendance/clock-config")
+                        .header(EMPLOYEE_HEADER, "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.morningStartTime").value("09:00"))
+                .andExpect(jsonPath("$.data.morningEndTime").value("12:00"))
+                .andExpect(jsonPath("$.data.afternoonStartTime").value("14:00"))
+                .andExpect(jsonPath("$.data.afternoonEndTime").value("17:00"))
+                .andExpect(jsonPath("$.data.centerLongitude").value(119.411209))
+                .andExpect(jsonPath("$.data.centerLatitude").value(26.022543))
+                .andExpect(jsonPath("$.data.radiusMeters").value(500));
+    }
+
+    @Test
+    void acceptsClockInsideBoundaryAndRejectsClockOutsideBoundary() throws Exception {
+        String outsideLocation =
+                "{\"longitude\":119.411209,\"latitude\":26.027040501139}";
+        mockMvc.perform(clockInRequest(
+                        "10",
+                        "{\"longitude\":119.411209,\"latitude\":26.027038702498}"
+                ))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(clockOutRequest("10", outsideLocation))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42202));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_record "
+                        + "WHERE employee_id = ? AND clock_out_time IS NOT NULL",
+                Integer.class,
+                10L
+        ));
+
+        mockMvc.perform(clockInRequest("11", outsideLocation))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42202))
+                .andExpect(jsonPath("$.message").value("当前位置不在允许打卡范围内"));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_record WHERE employee_id = ?",
+                Integer.class,
+                11L
+        ));
+    }
+
+    @Test
+    void rejectsClockWhenLocationIsMissingOrInvalid() throws Exception {
+        mockMvc.perform(post("/api/attendance/clock-in")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/attendance/clock-in")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType("application/json")
+                        .content("{\"longitude\":181,\"latitude\":26.022543}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void clocksInAndOutAndReturnsTodayRecord() throws Exception {
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.employeeId").value(10))
                 .andExpect(jsonPath("$.data.attendanceDate").value("2026-07-20"))
                 .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
 
         clock.setInstant(Instant.parse("2026-07-20T10:00:00Z"));
-        mockMvc.perform(post("/api/attendance/clock-out").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T18:00:00"));
 
@@ -89,13 +153,13 @@ class AttendanceControllerTests {
 
     @Test
     void rejectsInvalidClockSequenceAndDuplicateClockIn() throws Exception {
-        mockMvc.perform(post("/api/attendance/clock-out").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40903));
 
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk());
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40901));
     }
@@ -104,14 +168,14 @@ class AttendanceControllerTests {
     void rejectsClockWhenDistributedLockIsBusy() throws Exception {
         redisGuard.block(10L, LocalDate.of(2026, 7, 20), "CLOCK_IN");
 
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40904));
     }
 
     @Test
     void queriesPersonalRecordsByDateRange() throws Exception {
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/attendance/records")
@@ -185,7 +249,7 @@ class AttendanceControllerTests {
 
     @Test
     void returnsMakeupEligibilityForLateRecordWithRemainingQuota() throws Exception {
-        mockMvc.perform(post("/api/attendance/clock-in").header(EMPLOYEE_HEADER, "10"))
+        mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
         Long attendanceRecordId = jdbcTemplate.queryForObject(
@@ -415,6 +479,34 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.openapi").isNotEmpty())
                 .andExpect(jsonPath("$.servers[0].url").value("http://localhost:8088"))
                 .andExpect(jsonPath("$.paths['/api/attendance/clock-in']").exists());
+    }
+
+    private MockHttpServletRequestBuilder clockInRequest(String employeeId) {
+        return clockInRequest(employeeId, CENTER_LOCATION);
+    }
+
+    private MockHttpServletRequestBuilder clockInRequest(
+            String employeeId,
+            String location
+    ) {
+        return post("/api/attendance/clock-in")
+                .header(EMPLOYEE_HEADER, employeeId)
+                .contentType("application/json")
+                .content(location);
+    }
+
+    private MockHttpServletRequestBuilder clockOutRequest(String employeeId) {
+        return clockOutRequest(employeeId, CENTER_LOCATION);
+    }
+
+    private MockHttpServletRequestBuilder clockOutRequest(
+            String employeeId,
+            String location
+    ) {
+        return post("/api/attendance/clock-out")
+                .header(EMPLOYEE_HEADER, employeeId)
+                .contentType("application/json")
+                .content(location);
     }
 
     private Long insertLateRecordWithQuota(int totalCount, int usedCount) {

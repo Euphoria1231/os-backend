@@ -13,7 +13,8 @@ public enum AttendanceErrorCode implements ErrorCode {
     MAKEUP_QUOTA_BELOW_USED(40905, "补签总次数不能小于已使用次数"),
     MAKEUP_QUOTA_UNAVAILABLE(40906, "当月无可用补签次数"),
     MAKEUP_APPLICATION_CONFLICT(40907, "补签申请与考勤记录不匹配"),
-    MAKEUP_REQUIRES_LATE_RECORD(42201, "只有迟到考勤记录可以申请补签");
+    MAKEUP_REQUIRES_LATE_RECORD(42201, "只有迟到考勤记录可以申请补签"),
+    OUTSIDE_CLOCK_AREA(42202, "当前位置不在允许打卡范围内");
 
     private final int code;
     private final String message;

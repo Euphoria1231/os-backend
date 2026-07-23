@@ -1,6 +1,8 @@
 package com.tsy.oa.attendance.controller;
 
+import com.tsy.oa.attendance.dto.AttendanceClockConfigResponse;
 import com.tsy.oa.attendance.dto.AttendanceRecordResponse;
+import com.tsy.oa.attendance.dto.ClockLocationRequest;
 import com.tsy.oa.attendance.dto.MakeupQuotaAssignmentRequest;
 import com.tsy.oa.attendance.dto.MakeupQuotaResponse;
 import com.tsy.oa.attendance.service.AttendanceService;
@@ -35,16 +37,23 @@ public class AttendanceController {
 
     @PostMapping("/clock-in")
     public ApiResponse<AttendanceRecordResponse> clockIn(
-            @RequestHeader(EMPLOYEE_HEADER) Long employeeId
+            @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
+            @Valid @RequestBody ClockLocationRequest request
     ) {
-        return ApiResponse.success(attendanceService.clockIn(employeeId));
+        return ApiResponse.success(attendanceService.clockIn(employeeId, request));
     }
 
     @PostMapping("/clock-out")
     public ApiResponse<AttendanceRecordResponse> clockOut(
-            @RequestHeader(EMPLOYEE_HEADER) Long employeeId
+            @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
+            @Valid @RequestBody ClockLocationRequest request
     ) {
-        return ApiResponse.success(attendanceService.clockOut(employeeId));
+        return ApiResponse.success(attendanceService.clockOut(employeeId, request));
+    }
+
+    @GetMapping("/clock-config")
+    public ApiResponse<AttendanceClockConfigResponse> clockConfig() {
+        return ApiResponse.success(attendanceService.getClockConfig());
     }
 
     @GetMapping("/today")

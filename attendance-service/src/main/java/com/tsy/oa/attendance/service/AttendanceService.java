@@ -1,7 +1,10 @@
 package com.tsy.oa.attendance.service;
 
 import com.tsy.oa.attendance.config.AttendanceClockProperties;
+import com.tsy.oa.attendance.config.AttendanceGeofenceProperties;
+import com.tsy.oa.attendance.dto.AttendanceClockConfigResponse;
 import com.tsy.oa.attendance.dto.AttendanceRecordResponse;
+import com.tsy.oa.attendance.dto.ClockLocationRequest;
 import com.tsy.oa.attendance.dto.MakeupCompletionRequest;
 import com.tsy.oa.attendance.dto.MakeupCompletionResponse;
 import com.tsy.oa.attendance.dto.MakeupEligibilityResponse;
@@ -35,6 +38,8 @@ public class AttendanceService {
     private final AttendanceMapper attendanceMapper;
     private final AttendanceRedisGuard redisGuard;
     private final AttendanceClockProperties clockProperties;
+    private final AttendanceGeofenceProperties geofenceProperties;
+    private final AttendanceGeofenceService geofenceService;
     private final EmployeeDirectory employeeDirectory;
     private final Clock clock;
 
@@ -42,18 +47,26 @@ public class AttendanceService {
             AttendanceMapper attendanceMapper,
             AttendanceRedisGuard redisGuard,
             AttendanceClockProperties clockProperties,
+            AttendanceGeofenceProperties geofenceProperties,
+            AttendanceGeofenceService geofenceService,
             EmployeeDirectory employeeDirectory,
             Clock clock
     ) {
         this.attendanceMapper = attendanceMapper;
         this.redisGuard = redisGuard;
         this.clockProperties = clockProperties;
+        this.geofenceProperties = geofenceProperties;
+        this.geofenceService = geofenceService;
         this.employeeDirectory = employeeDirectory;
         this.clock = clock;
     }
 
     @Transactional
-    public AttendanceRecordResponse clockIn(Long employeeId) {
+    public AttendanceRecordResponse clockIn(
+            Long employeeId,
+            ClockLocationRequest location
+    ) {
+        geofenceService.requireInside(location);
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate date = now.toLocalDate();
         if (redisGuard.isCompleted(employeeId, date, CLOCK_IN)) {
@@ -83,7 +96,11 @@ public class AttendanceService {
     }
 
     @Transactional
-    public AttendanceRecordResponse clockOut(Long employeeId) {
+    public AttendanceRecordResponse clockOut(
+            Long employeeId,
+            ClockLocationRequest location
+    ) {
+        geofenceService.requireInside(location);
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate date = now.toLocalDate();
         if (redisGuard.isCompleted(employeeId, date, CLOCK_OUT)) {
@@ -118,6 +135,10 @@ public class AttendanceService {
             throw new BusinessException(AttendanceErrorCode.RECORD_NOT_FOUND);
         }
         return AttendanceRecordResponse.from(record);
+    }
+
+    public AttendanceClockConfigResponse getClockConfig() {
+        return AttendanceClockConfigResponse.from(clockProperties, geofenceProperties);
     }
 
     @Transactional(readOnly = true)
