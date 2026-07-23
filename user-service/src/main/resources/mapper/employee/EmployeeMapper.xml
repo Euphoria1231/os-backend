@@ -82,4 +82,39 @@
         SELECT COUNT(*) FROM employee WHERE username = #{username}
         <if test="excludeId != null">AND id != #{excludeId}</if>
     </select>
+
+    <resultMap id="NameCountResultMap" type="com.tsy.oa.user.dashboard.dto.NameCountResponse">
+        <constructor>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="item_count" javaType="long"/>
+        </constructor>
+    </resultMap>
+
+    <select id="countEmployees" resultType="long">
+        SELECT COUNT(*) FROM employee
+    </select>
+
+    <select id="countEnabledEmployees" resultType="long">
+        SELECT COUNT(*) FROM employee WHERE status = 1
+    </select>
+
+    <select id="countDisabledEmployees" resultType="long">
+        SELECT COUNT(*) FROM employee WHERE status != 1
+    </select>
+
+    <select id="countEmployeesByDepartment" resultMap="NameCountResultMap">
+        SELECT d.name, COUNT(e.id) AS item_count
+        FROM department d
+        LEFT JOIN employee e ON e.department_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY item_count DESC, d.id
+    </select>
+
+    <select id="countEmployeesByPosition" resultMap="NameCountResultMap">
+        SELECT p.name, COUNT(e.id) AS item_count
+        FROM position p
+        LEFT JOIN employee e ON e.position_id = p.id
+        GROUP BY p.id, p.name
+        ORDER BY item_count DESC, p.id
+    </select>
 </mapper>
