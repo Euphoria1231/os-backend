@@ -7,13 +7,16 @@ CREATE TABLE flow_application (
     applicant_id BIGINT NOT NULL,
     approver_id BIGINT NOT NULL,
     application_type VARCHAR(20) NOT NULL,
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
+    attendance_record_id BIGINT NULL,
+    makeup_active_marker INT NULL,
+    start_time TIMESTAMP NULL,
+    end_time TIMESTAMP NULL,
     reason VARCHAR(500) NOT NULL,
     status VARCHAR(20) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uk_flow_application_no UNIQUE (application_no)
+    CONSTRAINT uk_flow_application_no UNIQUE (application_no),
+    CONSTRAINT uk_flow_makeup_active UNIQUE (attendance_record_id, makeup_active_marker)
 );
 
 CREATE TABLE approval_record (

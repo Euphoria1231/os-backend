@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tsy.oa.flow.mapper.MakeupFlowMapper">
+
+    <select id="findActiveApplicationIdByAttendanceRecordId" resultType="long">
+        SELECT id
+        FROM flow_application
+        WHERE attendance_record_id = #{attendanceRecordId}
+          AND makeup_active_marker = 1
+        LIMIT 1
+    </select>
+
+    <update id="releaseActiveMarker">
+        UPDATE flow_application
+        SET makeup_active_marker = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{applicationId}
+          AND application_type = 'MAKEUP'
+          AND status = 'REJECTED'
+    </update>
+</mapper>

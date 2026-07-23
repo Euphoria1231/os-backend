@@ -10,6 +10,7 @@ public record FlowApplicationResponse(
         Long applicantId,
         Long approverId,
         String applicationType,
+        Long attendanceRecordId,
         LocalDateTime startTime,
         LocalDateTime endTime,
         String reason,
@@ -20,7 +21,8 @@ public record FlowApplicationResponse(
     public static FlowApplicationResponse from(FlowApplication application) {
         return new FlowApplicationResponse(
                 application.getId(), application.getApplicationNo(), application.getApplicantId(),
-                application.getApproverId(), application.getApplicationType(), application.getStartTime(),
+                application.getApproverId(), application.getApplicationType(),
+                application.getAttendanceRecordId(), application.getStartTime(),
                 application.getEndTime(), application.getReason(), application.getStatus(),
                 application.getCreatedAt(), application.getUpdatedAt()
         );

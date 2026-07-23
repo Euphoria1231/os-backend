@@ -9,6 +9,8 @@ public class FlowApplication {
     private Long applicantId;
     private Long approverId;
     private String applicationType;
+    private Long attendanceRecordId;
+    private Integer makeupActiveMarker;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private String reason;
@@ -26,6 +28,12 @@ public class FlowApplication {
     public void setApproverId(Long approverId) { this.approverId = approverId; }
     public String getApplicationType() { return applicationType; }
     public void setApplicationType(String applicationType) { this.applicationType = applicationType; }
+    public Long getAttendanceRecordId() { return attendanceRecordId; }
+    public void setAttendanceRecordId(Long attendanceRecordId) { this.attendanceRecordId = attendanceRecordId; }
+    public Integer getMakeupActiveMarker() { return makeupActiveMarker; }
+    public void setMakeupActiveMarker(Integer makeupActiveMarker) {
+        this.makeupActiveMarker = makeupActiveMarker;
+    }
     public LocalDateTime getStartTime() { return startTime; }
     public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
     public LocalDateTime getEndTime() { return endTime; }

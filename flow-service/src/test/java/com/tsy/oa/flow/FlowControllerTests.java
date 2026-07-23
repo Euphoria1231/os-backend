@@ -2,7 +2,10 @@ package com.tsy.oa.flow;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
+import com.tsy.oa.flow.error.FlowErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,9 +23,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -47,12 +54,19 @@ class FlowControllerTests {
     @Autowired
     private InMemoryEmployeeDirectory employeeDirectory;
 
+    @Autowired
+    private InMemoryAttendanceMakeupGateway attendanceMakeupGateway;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
         jdbcTemplate.update("DELETE FROM flow_application");
         employeeDirectory.clear();
         employeeDirectory.setLeader(10L, 20L);
+        attendanceMakeupGateway.clear();
+        attendanceMakeupGateway.allow(
+                1L, 10L, LocalDate.of(2026, 7, 20), 5
+        );
     }
 
     @Test
@@ -104,6 +118,85 @@ class FlowControllerTests {
                         .content("{\"comment\":\"时间安排不合理\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("REJECTED"));
+    }
+
+    @Test
+    void submitsMakeupForLateRecordAndAssignsDirectLeader() throws Exception {
+        mockMvc.perform(post("/api/flow/applications/makeup")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"attendanceRecordId\":1,\"reason\":\"早高峰交通拥堵\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applicantId").value(10))
+                .andExpect(jsonPath("$.data.approverId").value(20))
+                .andExpect(jsonPath("$.data.applicationType").value("MAKEUP"))
+                .andExpect(jsonPath("$.data.attendanceRecordId").value(1))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    void rejectsDuplicateActiveMakeupApplication() throws Exception {
+        submitMakeup(1L);
+
+        mockMvc.perform(post("/api/flow/applications/makeup")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"attendanceRecordId\":1,\"reason\":\"重复申请\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40902));
+    }
+
+    @Test
+    void directLeaderApprovesMakeupAndCompletesAttendance() throws Exception {
+        long applicationId = submitMakeup(1L);
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意补签\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+
+        assertEquals(1, attendanceMakeupGateway.completionCount());
+    }
+
+    @Test
+    void rejectsMakeupWithoutConsumingQuotaAndAllowsResubmission() throws Exception {
+        long applicationId = submitMakeup(1L);
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/reject", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"补签理由不足\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+        submitMakeup(1L);
+        assertEquals(0, attendanceMakeupGateway.completionCount());
+    }
+
+    @Test
+    void keepsMakeupPendingWhenAttendanceCompletionFails() throws Exception {
+        long applicationId = submitMakeup(1L);
+        attendanceMakeupGateway.failCompletion();
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意补签\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40904));
+
+        assertEquals("PENDING", jdbcTemplate.queryForObject(
+                "SELECT status FROM flow_application WHERE id = ?",
+                String.class,
+                applicationId
+        ));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM approval_record WHERE application_id = ?",
+                Integer.class,
+                applicationId
+        ));
     }
 
     @Test
@@ -176,6 +269,20 @@ class FlowControllerTests {
         return body.path("data").path("id").asLong();
     }
 
+    private long submitMakeup(Long attendanceRecordId) throws Exception {
+        String response = mockMvc.perform(post("/api/flow/applications/makeup")
+                        .header(EMPLOYEE_HEADER, "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"attendanceRecordId\":" + attendanceRecordId
+                                + ",\"reason\":\"早高峰交通拥堵\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(response).path("data").path("id").asLong();
+    }
+
     private String applicationJson(String reason) throws Exception {
         return objectMapper.writeValueAsString(new ApplicationPayload(
                 LocalDateTime.of(2026, 7, 21, 9, 0),
@@ -201,6 +308,12 @@ class FlowControllerTests {
         InMemoryEmployeeDirectory inMemoryEmployeeDirectory() {
             return new InMemoryEmployeeDirectory();
         }
+
+        @Bean
+        @Primary
+        InMemoryAttendanceMakeupGateway inMemoryAttendanceMakeupGateway() {
+            return new InMemoryAttendanceMakeupGateway();
+        }
     }
 
     static class InMemoryEmployeeDirectory implements EmployeeDirectory {
@@ -218,6 +331,51 @@ class FlowControllerTests {
 
         void clear() {
             leaders.clear();
+        }
+    }
+
+    static class InMemoryAttendanceMakeupGateway implements AttendanceMakeupGateway {
+
+        private final Map<Long, MakeupEligibility> eligibilityByRecord = new ConcurrentHashMap<>();
+        private final List<Long> completedApplications = new ArrayList<>();
+        private boolean completionFails;
+
+        @Override
+        public MakeupEligibility getEligibility(Long attendanceRecordId, Long employeeId) {
+            MakeupEligibility eligibility = eligibilityByRecord.get(attendanceRecordId);
+            if (eligibility == null || !eligibility.employeeId().equals(employeeId)) {
+                throw new BusinessException(FlowErrorCode.MAKEUP_NOT_ELIGIBLE);
+            }
+            return eligibility;
+        }
+
+        @Override
+        public void completeMakeup(Long attendanceRecordId, Long employeeId, Long applicationId) {
+            if (completionFails) {
+                throw new BusinessException(FlowErrorCode.MAKEUP_COMPLETION_FAILED);
+            }
+            completedApplications.add(applicationId);
+        }
+
+        void allow(Long attendanceRecordId, Long employeeId, LocalDate date, int remainingCount) {
+            eligibilityByRecord.put(
+                    attendanceRecordId,
+                    new MakeupEligibility(attendanceRecordId, employeeId, date, remainingCount)
+            );
+        }
+
+        int completionCount() {
+            return completedApplications.size();
+        }
+
+        void failCompletion() {
+            completionFails = true;
+        }
+
+        void clear() {
+            eligibilityByRecord.clear();
+            completedApplications.clear();
+            completionFails = false;
         }
     }
 }

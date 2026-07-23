@@ -3,6 +3,7 @@ package com.tsy.oa.flow.controller;
 import com.tsy.oa.common.api.ApiResponse;
 import com.tsy.oa.flow.dto.ApplicationRequest;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
+import com.tsy.oa.flow.dto.MakeupApplicationRequest;
 import com.tsy.oa.flow.service.FlowService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,6 +41,14 @@ public class ApplicationController {
             @Valid @RequestBody ApplicationRequest request
     ) {
         return ApiResponse.success(flowService.submitOvertime(employeeId, request));
+    }
+
+    @PostMapping("/makeup")
+    public ApiResponse<FlowApplicationResponse> submitMakeup(
+            @RequestHeader(EMPLOYEE_HEADER) Long employeeId,
+            @Valid @RequestBody MakeupApplicationRequest request
+    ) {
+        return ApiResponse.success(flowService.submitMakeup(employeeId, request));
     }
 
     @GetMapping("/mine")

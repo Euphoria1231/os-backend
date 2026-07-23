@@ -8,6 +8,8 @@
         <result property="applicantId" column="applicant_id"/>
         <result property="approverId" column="approver_id"/>
         <result property="applicationType" column="application_type"/>
+        <result property="attendanceRecordId" column="attendance_record_id"/>
+        <result property="makeupActiveMarker" column="makeup_active_marker"/>
         <result property="startTime" column="start_time"/>
         <result property="endTime" column="end_time"/>
         <result property="reason" column="reason"/>
@@ -28,15 +30,18 @@
 
     <sql id="ApplicationColumns">
         id, application_no, applicant_id, approver_id, application_type,
+        attendance_record_id, makeup_active_marker,
         start_time, end_time, reason, status, created_at, updated_at
     </sql>
 
     <insert id="insertApplication" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO flow_application (
             application_no, applicant_id, approver_id, application_type,
+            attendance_record_id, makeup_active_marker,
             start_time, end_time, reason, status
         ) VALUES (
             #{applicationNo}, #{applicantId}, #{approverId}, #{applicationType},
+            #{attendanceRecordId}, #{makeupActiveMarker},
             #{startTime}, #{endTime}, #{reason}, #{status}
         )
     </insert>

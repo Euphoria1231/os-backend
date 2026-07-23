@@ -2,16 +2,21 @@ package com.tsy.oa.flow.service;
 
 import com.tsy.oa.common.error.CommonErrorCode;
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
+import com.tsy.oa.flow.attendance.AttendanceMakeupGateway.MakeupEligibility;
 import com.tsy.oa.flow.dto.ApplicationRequest;
 import com.tsy.oa.flow.dto.ApplicationSearchSourcePageResponse;
 import com.tsy.oa.flow.dto.ApplicationSearchSourceResponse;
 import com.tsy.oa.flow.dto.ApprovalRequest;
 import com.tsy.oa.flow.dto.ApprovalTaskResponse;
 import com.tsy.oa.flow.dto.FlowApplicationResponse;
+import com.tsy.oa.flow.dto.MakeupApplicationRequest;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
 import com.tsy.oa.flow.mapper.FlowMapper;
+import com.tsy.oa.flow.mapper.MakeupFlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,11 +33,20 @@ public class FlowService {
     private static final String REJECTED = "REJECTED";
 
     private final FlowMapper flowMapper;
+    private final MakeupFlowMapper makeupFlowMapper;
     private final EmployeeDirectory employeeDirectory;
+    private final AttendanceMakeupGateway attendanceMakeupGateway;
 
-    public FlowService(FlowMapper flowMapper, EmployeeDirectory employeeDirectory) {
+    public FlowService(
+            FlowMapper flowMapper,
+            MakeupFlowMapper makeupFlowMapper,
+            EmployeeDirectory employeeDirectory,
+            AttendanceMakeupGateway attendanceMakeupGateway
+    ) {
         this.flowMapper = flowMapper;
+        this.makeupFlowMapper = makeupFlowMapper;
         this.employeeDirectory = employeeDirectory;
+        this.attendanceMakeupGateway = attendanceMakeupGateway;
     }
 
     @Transactional
@@ -43,6 +57,41 @@ public class FlowService {
     @Transactional
     public FlowApplicationResponse submitOvertime(Long applicantId, ApplicationRequest request) {
         return submit(applicantId, "OVERTIME", request);
+    }
+
+    @Transactional
+    public FlowApplicationResponse submitMakeup(
+            Long applicantId,
+            MakeupApplicationRequest request
+    ) {
+        Long attendanceRecordId = request.attendanceRecordId();
+        ensureNoActiveMakeupApplication(attendanceRecordId);
+        MakeupEligibility eligibility = attendanceMakeupGateway.getEligibility(
+                attendanceRecordId, applicantId
+        );
+        Long approverId = employeeDirectory.findDirectLeaderId(applicantId);
+        if (approverId == null) {
+            throw new BusinessException(FlowErrorCode.DIRECT_LEADER_MISSING);
+        }
+
+        FlowApplication application = new FlowApplication();
+        application.setApplicationNo(generateApplicationNo("MAKEUP"));
+        application.setApplicantId(applicantId);
+        application.setApproverId(approverId);
+        application.setApplicationType("MAKEUP");
+        application.setAttendanceRecordId(eligibility.attendanceRecordId());
+        application.setMakeupActiveMarker(1);
+        application.setReason(request.reason().trim());
+        application.setStatus(PENDING);
+        try {
+            flowMapper.insertApplication(application);
+        } catch (DuplicateKeyException exception) {
+            if (hasActiveMakeupApplication(attendanceRecordId)) {
+                throw new BusinessException(FlowErrorCode.DUPLICATE_MAKEUP_APPLICATION);
+            }
+            throw exception;
+        }
+        return FlowApplicationResponse.from(requireApplication(application.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -151,6 +200,14 @@ public class FlowService {
         if (!PENDING.equals(application.getStatus())) {
             throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
+        boolean makeupApplication = "MAKEUP".equals(application.getApplicationType());
+        if (makeupApplication && APPROVED.equals(targetStatus)) {
+            attendanceMakeupGateway.completeMakeup(
+                    application.getAttendanceRecordId(),
+                    application.getApplicantId(),
+                    application.getId()
+            );
+        }
         if (flowMapper.updateApplicationStatusIfPending(applicationId, targetStatus) == 0) {
             throw new BusinessException(FlowErrorCode.ALREADY_PROCESSED);
         }
@@ -160,7 +217,22 @@ public class FlowService {
                 action,
                 comment == null || comment.isBlank() ? null : comment.trim()
         );
+        if (makeupApplication && REJECTED.equals(targetStatus)) {
+            makeupFlowMapper.releaseActiveMarker(applicationId);
+        }
         return FlowApplicationResponse.from(requireApplication(applicationId));
+    }
+
+    private void ensureNoActiveMakeupApplication(Long attendanceRecordId) {
+        if (hasActiveMakeupApplication(attendanceRecordId)) {
+            throw new BusinessException(FlowErrorCode.DUPLICATE_MAKEUP_APPLICATION);
+        }
+    }
+
+    private boolean hasActiveMakeupApplication(Long attendanceRecordId) {
+        return makeupFlowMapper.findActiveApplicationIdByAttendanceRecordId(
+                attendanceRecordId
+        ) != null;
     }
 
     private FlowApplication requireApplication(Long id) {
