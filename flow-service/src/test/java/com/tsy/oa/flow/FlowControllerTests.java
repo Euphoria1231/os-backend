@@ -10,6 +10,8 @@ import com.tsy.oa.flow.attendance.AttendanceMakeupGateway;
 import com.tsy.oa.flow.employee.EmployeeDirectory;
 import com.tsy.oa.flow.error.FlowErrorCode;
 import com.tsy.oa.flow.notification.PersonalNotificationPublisher;
+import com.tsy.oa.flow.search.SearchIndexEvent;
+import com.tsy.oa.flow.search.SearchIndexEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +69,9 @@ class FlowControllerTests {
     @Autowired
     private RecordingPersonalNotificationPublisher notificationPublisher;
 
+    @Autowired
+    private RecordingSearchIndexEventPublisher searchIndexEventPublisher;
+
     @BeforeEach
     void resetData() {
         jdbcTemplate.update("DELETE FROM approval_record");
@@ -77,6 +82,7 @@ class FlowControllerTests {
         attendanceMakeupGateway.clear();
         operationLogs.clear();
         notificationPublisher.clear();
+        searchIndexEventPublisher.clear();
         attendanceMakeupGateway.allow(
                 1L, 10L, LocalDate.of(2026, 7, 20), 5
         );
@@ -133,6 +139,76 @@ class FlowControllerTests {
                 "flow:" + applicationId + ":task:2:30:APPROVAL_TASK",
                 "flow:" + applicationId + ":approved:10:APPLICATION_APPROVED"
         ), notificationPublisher.summaries());
+    }
+
+    @Test
+    void publishesVersionedSearchIndexEventsAcrossTwoLevelApproval() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isOk());
+
+        assertEquals(List.of(
+                searchEvent(applicationId, 1L),
+                searchEvent(applicationId, 2L),
+                searchEvent(applicationId, 3L)
+        ), searchIndexEventPublisher.events());
+        assertEquals(3L, jdbcTemplate.queryForObject(
+                "SELECT search_version FROM flow_application WHERE id = ?",
+                Long.class,
+                applicationId
+        ));
+    }
+
+    @Test
+    void publishesSearchIndexEventWhenApplicationIsRejected() throws Exception {
+        long applicationId = submit("/api/flow/applications/overtime", 10L, "版本上线");
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/reject", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"时间安排不合理\"}"))
+                .andExpect(status().isOk());
+
+        assertEquals(List.of(
+                searchEvent(applicationId, 1L),
+                searchEvent(applicationId, 2L)
+        ), searchIndexEventPublisher.events());
+        assertEquals("REJECTED:2", jdbcTemplate.queryForObject(
+                "SELECT CONCAT(status, ':', search_version) FROM flow_application WHERE id = ?",
+                String.class,
+                applicationId
+        ));
+    }
+
+    @Test
+    void rollsBackApprovalWhenSearchIndexEventCannotBeSent() throws Exception {
+        long applicationId = submit("/api/flow/applications/leave", 10L, "家庭事务");
+        searchIndexEventPublisher.clear();
+        searchIndexEventPublisher.failNext();
+
+        mockMvc.perform(post("/api/flow/tasks/{id}/approve", applicationId)
+                        .header(EMPLOYEE_HEADER, "20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"同意\"}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(50000));
+
+        assertEquals("PENDING:20:1", jdbcTemplate.queryForObject(
+                "SELECT CONCAT(status, ':', approver_id, ':', search_version) "
+                        + "FROM flow_application WHERE id = ?",
+                String.class,
+                applicationId
+        ));
+        assertEquals(List.of("1:PENDING", "2:WAITING"), taskStates(applicationId));
     }
 
     @Test
@@ -456,6 +532,17 @@ class FlowControllerTests {
         );
     }
 
+    private SearchIndexEvent searchEvent(long applicationId, long version) {
+        return new SearchIndexEvent(
+                "application:" + applicationId + ":v:" + version,
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                applicationId,
+                version,
+                null
+        );
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @ComponentScan("com.tsy.oa.flow")
@@ -495,6 +582,12 @@ class FlowControllerTests {
         @Primary
         RecordingPersonalNotificationPublisher recordingPersonalNotificationPublisher() {
             return new RecordingPersonalNotificationPublisher();
+        }
+
+        @Bean
+        @Primary
+        RecordingSearchIndexEventPublisher recordingSearchIndexEventPublisher() {
+            return new RecordingSearchIndexEventPublisher();
         }
     }
 
@@ -623,6 +716,34 @@ class FlowControllerTests {
                             + ":" + event.recipientEmployeeId()
                             + ":" + event.notificationType())
                     .toList();
+        }
+
+        void failNext() {
+            failNext = true;
+        }
+
+        void clear() {
+            events.clear();
+            failNext = false;
+        }
+    }
+
+    static class RecordingSearchIndexEventPublisher implements SearchIndexEventPublisher {
+
+        private final List<SearchIndexEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private boolean failNext;
+
+        @Override
+        public void publish(SearchIndexEvent event) {
+            if (failNext) {
+                failNext = false;
+                throw new IllegalStateException("RocketMQ unavailable");
+            }
+            events.add(event);
+        }
+
+        List<SearchIndexEvent> events() {
+            return List.copyOf(events);
         }
 
         void failNext() {

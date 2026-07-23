@@ -21,6 +21,8 @@ import com.tsy.oa.flow.mapper.MakeupFlowMapper;
 import com.tsy.oa.flow.model.FlowApplication;
 import com.tsy.oa.flow.model.ApprovalTaskRecord;
 import com.tsy.oa.flow.notification.PersonalNotificationPublisher;
+import com.tsy.oa.flow.search.SearchIndexEvent;
+import com.tsy.oa.flow.search.SearchIndexEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,19 +46,22 @@ public class FlowService {
     private final EmployeeDirectory employeeDirectory;
     private final AttendanceMakeupGateway attendanceMakeupGateway;
     private final PersonalNotificationPublisher notificationPublisher;
+    private final SearchIndexEventPublisher searchIndexEventPublisher;
 
     public FlowService(
             FlowMapper flowMapper,
             MakeupFlowMapper makeupFlowMapper,
             EmployeeDirectory employeeDirectory,
             AttendanceMakeupGateway attendanceMakeupGateway,
-            PersonalNotificationPublisher notificationPublisher
+            PersonalNotificationPublisher notificationPublisher,
+            SearchIndexEventPublisher searchIndexEventPublisher
     ) {
         this.flowMapper = flowMapper;
         this.makeupFlowMapper = makeupFlowMapper;
         this.employeeDirectory = employeeDirectory;
         this.attendanceMakeupGateway = attendanceMakeupGateway;
         this.notificationPublisher = notificationPublisher;
+        this.searchIndexEventPublisher = searchIndexEventPublisher;
     }
 
     @Transactional
@@ -100,7 +105,9 @@ public class FlowService {
         }
         insertApprovalTasks(application.getId(), approvalRoute);
         publishApprovalTask(application, 1, approvalRoute.directLeaderId());
-        return toResponse(requireApplication(application.getId()));
+        FlowApplication persistedApplication = requireApplication(application.getId());
+        publishSearchIndexEvent(persistedApplication);
+        return toResponse(persistedApplication);
     }
 
     @Transactional(readOnly = true)
@@ -191,7 +198,9 @@ public class FlowService {
         flowMapper.insertApplication(application);
         insertApprovalTasks(application.getId(), approvalRoute);
         publishApprovalTask(application, 1, approvalRoute.directLeaderId());
-        return toResponse(requireApplication(application.getId()));
+        FlowApplication persistedApplication = requireApplication(application.getId());
+        publishSearchIndexEvent(persistedApplication);
+        return toResponse(persistedApplication);
     }
 
     private FlowApplicationResponse process(
@@ -254,7 +263,9 @@ public class FlowService {
                 );
             }
         }
-        return toResponse(requireApplication(applicationId));
+        FlowApplication updatedApplication = requireApplication(applicationId);
+        publishSearchIndexEvent(updatedApplication);
+        return toResponse(updatedApplication);
     }
 
     private void finishRejectedApplication(Long applicationId, boolean makeupApplication) {
@@ -366,6 +377,20 @@ public class FlowService {
             case "MAKEUP" -> "补签";
             default -> "办公";
         };
+    }
+
+    private void publishSearchIndexEvent(FlowApplication application) {
+        if (application.getId() == null || application.getSearchVersion() == null) {
+            throw new IllegalStateException("Application search event version is unavailable");
+        }
+        searchIndexEventPublisher.publish(new SearchIndexEvent(
+                "application:" + application.getId() + ":v:" + application.getSearchVersion(),
+                SearchIndexEvent.AggregateType.APPLICATION,
+                SearchIndexEvent.Operation.UPSERT,
+                application.getId(),
+                application.getSearchVersion(),
+                null
+        ));
     }
 
     private FlowApplicationResponse toResponse(FlowApplication application) {

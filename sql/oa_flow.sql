@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS flow_application (
     status VARCHAR(20) NOT NULL COMMENT '状态：PENDING、APPROVED、REJECTED',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    search_version BIGINT NOT NULL DEFAULT 1 COMMENT '搜索索引事件版本',
     UNIQUE KEY uk_flow_application_no (application_no),
     UNIQUE KEY uk_flow_makeup_active (attendance_record_id, makeup_active_marker),
     KEY idx_flow_applicant_created (applicant_id, created_at),

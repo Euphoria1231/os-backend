@@ -40,6 +40,9 @@ oa:
   notification:
     events:
       topic: ${PERSONAL_NOTIFICATION_EVENTS_TOPIC:oa-personal-notification-events}
+  search:
+    events:
+      topic: ${SEARCH_INDEX_EVENTS_TOPIC:oa-search-index-events}
 
 mybatis:
   mapper-locations: classpath:/mapper/**/*.xml

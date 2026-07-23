@@ -16,6 +16,7 @@ CREATE TABLE flow_application (
     status VARCHAR(20) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    search_version BIGINT NOT NULL DEFAULT 1,
     CONSTRAINT uk_flow_application_no UNIQUE (application_no),
     CONSTRAINT uk_flow_makeup_active UNIQUE (attendance_record_id, makeup_active_marker)
 );
