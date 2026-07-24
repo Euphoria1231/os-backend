@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 public class Position {
 
     private Long id;
+    private Long departmentId;
+    private String departmentName;
     private String code;
     private String name;
     private String description;
@@ -18,6 +20,22 @@ public class Position {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(Long departmentId) {
+        this.departmentId = departmentId;
+    }
+
+    public String getDepartmentName() {
+        return departmentName;
+    }
+
+    public void setDepartmentName(String departmentName) {
+        this.departmentName = departmentName;
     }
 
     public String getCode() {

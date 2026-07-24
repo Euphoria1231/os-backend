@@ -89,9 +89,29 @@
         FROM employee e
         LEFT JOIN department d ON d.id = e.department_id
         LEFT JOIN employee direct_leader
-               ON direct_leader.id = e.leader_id AND direct_leader.status = 1
+               ON direct_leader.id = e.leader_id
+              AND direct_leader.department_id = e.department_id
+              AND direct_leader.status = 1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM employee_role direct_role_link
+                  JOIN sys_role direct_role ON direct_role.id = direct_role_link.role_id
+                  WHERE direct_role_link.employee_id = direct_leader.id
+                    AND direct_role.code = 'SUPER_ADMIN'
+                    AND direct_role.status = 1
+              )
         LEFT JOIN employee department_leader
-               ON department_leader.id = d.leader_employee_id AND department_leader.status = 1
+               ON department_leader.id = d.leader_employee_id
+              AND department_leader.department_id = e.department_id
+              AND department_leader.status = 1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM employee_role department_role_link
+                  JOIN sys_role department_role ON department_role.id = department_role_link.role_id
+                  WHERE department_role_link.employee_id = department_leader.id
+                    AND department_role.code = 'SUPER_ADMIN'
+                    AND department_role.status = 1
+              )
         WHERE e.id = #{applicantId}
     </select>
 
@@ -113,6 +133,21 @@
     <select id="countByUsername" resultType="int">
         SELECT COUNT(*) FROM employee WHERE username = #{username}
         <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <select id="hasRoleCode" resultType="boolean">
+        SELECT COUNT(*) &gt; 0
+        FROM employee_role er
+        JOIN sys_role r ON r.id = er.role_id
+        WHERE er.employee_id = #{employeeId}
+          AND r.code = #{roleCode}
+          AND r.status = 1
+    </select>
+
+    <select id="countByLeaderId" resultType="int">
+        SELECT COUNT(*)
+        FROM employee
+        WHERE leader_id = #{leaderId}
     </select>
 
     <resultMap id="NameCountResultMap" type="com.tsy.oa.user.dashboard.dto.NameCountResponse">

@@ -1,6 +1,7 @@
 package com.tsy.oa.user.position.service;
 
 import com.tsy.oa.common.exception.BusinessException;
+import com.tsy.oa.user.department.mapper.DepartmentMapper;
 import com.tsy.oa.user.error.UserErrorCode;
 import com.tsy.oa.user.position.dto.PositionRequest;
 import com.tsy.oa.user.position.dto.PositionResponse;
@@ -16,15 +17,18 @@ import java.util.Locale;
 public class PositionService {
 
     private final PositionMapper positionMapper;
+    private final DepartmentMapper departmentMapper;
 
-    public PositionService(PositionMapper positionMapper) {
+    public PositionService(PositionMapper positionMapper, DepartmentMapper departmentMapper) {
         this.positionMapper = positionMapper;
+        this.departmentMapper = departmentMapper;
     }
 
     @Transactional
     public PositionResponse create(PositionRequest request) {
         String code = normalizeCode(request.code());
         ensureCodeAvailable(code, null);
+        requireDepartment(request.departmentId());
         Position position = toPosition(request, code);
         positionMapper.insert(position);
         return getById(position.getId());
@@ -45,6 +49,10 @@ public class PositionService {
         requirePosition(id);
         String code = normalizeCode(request.code());
         ensureCodeAvailable(code, id);
+        requireDepartment(request.departmentId());
+        if (positionMapper.countEmployeesOutsideDepartment(id, request.departmentId()) > 0) {
+            throw new BusinessException(UserErrorCode.POSITION_DEPARTMENT_CHANGE_CONFLICT);
+        }
         Position position = toPosition(request, code);
         position.setId(id);
         positionMapper.update(position);
@@ -67,6 +75,7 @@ public class PositionService {
 
     private Position toPosition(PositionRequest request, String code) {
         Position position = new Position();
+        position.setDepartmentId(request.departmentId());
         position.setCode(code);
         position.setName(request.name().trim());
         position.setDescription(request.description());
@@ -82,5 +91,11 @@ public class PositionService {
 
     private String normalizeCode(String code) {
         return code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void requireDepartment(Long departmentId) {
+        if (departmentMapper.findById(departmentId) == null) {
+            throw new BusinessException(UserErrorCode.DEPARTMENT_NOT_FOUND);
+        }
     }
 }

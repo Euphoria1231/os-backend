@@ -19,7 +19,13 @@ public enum UserErrorCode implements ErrorCode {
     USERNAME_EXISTS(40904, "登录账号已存在"),
     ROLE_CODE_EXISTS(40905, "角色编码已存在"),
     API_PERMISSION_CODE_EXISTS(40906, "接口权限编码已存在"),
-    SUPER_ADMIN_PERMISSIONS_IMMUTABLE(40907, "超级管理员始终拥有全部权限，不允许覆盖授权");
+    SUPER_ADMIN_PERMISSIONS_IMMUTABLE(40907, "超级管理员始终拥有全部权限，不允许覆盖授权"),
+    POSITION_DEPARTMENT_MISMATCH(40908, "所选岗位不属于员工所在部门"),
+    DIRECT_LEADER_DEPARTMENT_MISMATCH(40909, "直属领导必须是同部门在职员工"),
+    DEPARTMENT_LEADER_DEPARTMENT_MISMATCH(40910, "部门负责人必须是本部门在职员工"),
+    SUPER_ADMIN_CANNOT_BE_BUSINESS_LEADER(40911, "超级管理员不能担任直属领导或部门负责人"),
+    POSITION_DEPARTMENT_CHANGE_CONFLICT(40912, "岗位仍有关联员工，不能变更所属部门"),
+    BUSINESS_LEADER_DEPARTMENT_CHANGE_CONFLICT(40913, "员工仍是直属领导或部门负责人，不能调离部门或停用");
 
     private final int code;
     private final String message;

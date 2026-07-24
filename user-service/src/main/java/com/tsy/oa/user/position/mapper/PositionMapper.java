@@ -20,4 +20,9 @@ public interface PositionMapper {
     int deleteById(Long id);
 
     int countByCode(@Param("code") String code, @Param("excludeId") Long excludeId);
+
+    int countEmployeesOutsideDepartment(
+            @Param("positionId") Long positionId,
+            @Param("departmentId") Long departmentId
+    );
 }

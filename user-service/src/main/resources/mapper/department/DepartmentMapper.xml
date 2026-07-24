@@ -82,4 +82,10 @@
         </if>
     </select>
 
+    <select id="countByLeaderEmployeeId" resultType="int">
+        SELECT COUNT(*)
+        FROM department
+        WHERE leader_employee_id = #{leaderEmployeeId}
+    </select>
+
 </mapper>

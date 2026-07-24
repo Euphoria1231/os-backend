@@ -19,6 +19,8 @@ import java.util.List;
 @Service
 public class EmployeeService {
 
+    private static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
+
     private final EmployeeMapper employeeMapper;
     private final DepartmentMapper departmentMapper;
     private final PositionService positionService;
@@ -40,7 +42,7 @@ public class EmployeeService {
     public EmployeeResponse create(EmployeeCreateRequest request) {
         ensureEmployeeNoAvailable(request.employeeNo(), null);
         ensureUsernameAvailable(request.username(), null);
-        validateOrganization(request.departmentId(), request.positionId(), request.leaderId());
+        validateOrganization(null, request.departmentId(), request.positionId(), request.leaderId());
 
         Employee employee = new Employee();
         employee.setEmployeeNo(request.employeeNo().trim());
@@ -86,7 +88,14 @@ public class EmployeeService {
     @Transactional
     public EmployeeResponse update(Long id, EmployeeUpdateRequest request) {
         Employee existing = requireEmployee(id);
-        validateOrganization(request.departmentId(), request.positionId(), request.leaderId());
+        validateOrganization(id, request.departmentId(), request.positionId(), request.leaderId());
+        boolean leavesCurrentDepartment = !existing.getDepartmentId().equals(request.departmentId());
+        boolean becomesDisabled = !Integer.valueOf(1).equals(request.status());
+        if ((leavesCurrentDepartment || becomesDisabled)
+                && (employeeMapper.countByLeaderId(id) > 0
+                || departmentMapper.countByLeaderEmployeeId(id) > 0)) {
+            throw new BusinessException(UserErrorCode.BUSINESS_LEADER_DEPARTMENT_CHANGE_CONFLICT);
+        }
         existing.setRealName(request.realName().trim());
         existing.setDepartmentId(request.departmentId());
         existing.setPositionId(request.positionId());
@@ -112,13 +121,28 @@ public class EmployeeService {
         return employee;
     }
 
-    private void validateOrganization(Long departmentId, Long positionId, Long leaderId) {
+    private void validateOrganization(
+            Long employeeId,
+            Long departmentId,
+            Long positionId,
+            Long leaderId
+    ) {
         if (departmentMapper.findById(departmentId) == null) {
             throw new BusinessException(UserErrorCode.DEPARTMENT_NOT_FOUND);
         }
-        positionService.requirePosition(positionId);
+        if (!departmentId.equals(positionService.requirePosition(positionId).getDepartmentId())) {
+            throw new BusinessException(UserErrorCode.POSITION_DEPARTMENT_MISMATCH);
+        }
         if (leaderId != null) {
-            requireEmployee(leaderId);
+            Employee leader = requireEmployee(leaderId);
+            if (leaderId.equals(employeeId)
+                    || !departmentId.equals(leader.getDepartmentId())
+                    || !Integer.valueOf(1).equals(leader.getStatus())) {
+                throw new BusinessException(UserErrorCode.DIRECT_LEADER_DEPARTMENT_MISMATCH);
+            }
+            if (employeeMapper.hasRoleCode(leaderId, SUPER_ADMIN_ROLE)) {
+                throw new BusinessException(UserErrorCode.SUPER_ADMIN_CANNOT_BE_BUSINESS_LEADER);
+            }
         }
     }
 

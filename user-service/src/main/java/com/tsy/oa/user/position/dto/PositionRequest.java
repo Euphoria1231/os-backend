@@ -8,6 +8,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record PositionRequest(
+        @NotNull(message = "所属部门不能为空")
+        Long departmentId,
+
         @NotBlank(message = "岗位编码不能为空")
         @Size(max = 50, message = "岗位编码不能超过50个字符")
         @Pattern(regexp = "[A-Za-z0-9_]+", message = "岗位编码只能包含字母、数字和下划线")

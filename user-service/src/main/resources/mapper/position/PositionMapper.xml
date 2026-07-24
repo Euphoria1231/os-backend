@@ -4,6 +4,8 @@
 
     <resultMap id="PositionResultMap" type="com.tsy.oa.user.position.model.Position">
         <id property="id" column="id"/>
+        <result property="departmentId" column="department_id"/>
+        <result property="departmentName" column="department_name"/>
         <result property="code" column="code"/>
         <result property="name" column="name"/>
         <result property="description" column="description"/>
@@ -13,23 +15,29 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO position (code, name, description, status)
-        VALUES (#{code}, #{name}, #{description}, #{status})
+        INSERT INTO position (department_id, code, name, description, status)
+        VALUES (#{departmentId}, #{code}, #{name}, #{description}, #{status})
     </insert>
 
     <select id="findById" resultMap="PositionResultMap">
-        SELECT id, code, name, description, status, created_at, updated_at
-        FROM position WHERE id = #{id}
+        SELECT p.id, p.department_id, d.name AS department_name,
+               p.code, p.name, p.description, p.status, p.created_at, p.updated_at
+        FROM position p
+        LEFT JOIN department d ON d.id = p.department_id
+        WHERE p.id = #{id}
     </select>
 
     <select id="findAll" resultMap="PositionResultMap">
-        SELECT id, code, name, description, status, created_at, updated_at
-        FROM position ORDER BY id
+        SELECT p.id, p.department_id, d.name AS department_name,
+               p.code, p.name, p.description, p.status, p.created_at, p.updated_at
+        FROM position p
+        LEFT JOIN department d ON d.id = p.department_id
+        ORDER BY p.id
     </select>
 
     <update id="update">
         UPDATE position
-        SET code = #{code}, name = #{name}, description = #{description},
+        SET department_id = #{departmentId}, code = #{code}, name = #{name}, description = #{description},
             status = #{status}, updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>
@@ -39,5 +47,12 @@
     <select id="countByCode" resultType="int">
         SELECT COUNT(*) FROM position WHERE code = #{code}
         <if test="excludeId != null">AND id != #{excludeId}</if>
+    </select>
+
+    <select id="countEmployeesOutsideDepartment" resultType="int">
+        SELECT COUNT(*)
+        FROM employee
+        WHERE position_id = #{positionId}
+          AND department_id != #{departmentId}
     </select>
 </mapper>

@@ -23,6 +23,7 @@ CREATE TABLE department (
 
 CREATE TABLE position (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    department_id BIGINT NULL,
     code VARCHAR(50) NOT NULL,
     name VARCHAR(100) NOT NULL,
     description VARCHAR(500) NULL,
