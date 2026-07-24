@@ -345,6 +345,50 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void directLeaderQueriesDirectReportRecords() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO attendance_record "
+                        + "(employee_id, attendance_date, clock_in_time, attendance_status) "
+                        + "VALUES (?, ?, ?, ?)",
+                10L,
+                LocalDate.of(2026, 7, 20),
+                LocalDateTime.of(2026, 7, 20, 9, 5),
+                "LATE"
+        );
+
+        mockMvc.perform(get("/internal/attendance/records")
+                        .param("requesterId", "20")
+                        .param("targetEmployeeId", "10")
+                        .param("startDate", "2026-07-01")
+                        .param("endDate", "2026-07-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].employeeId").value(10));
+    }
+
+    @Test
+    void rejectsDirectReportRecordsForSelf() throws Exception {
+        mockMvc.perform(get("/internal/attendance/records")
+                        .param("requesterId", "10")
+                        .param("targetEmployeeId", "10")
+                        .param("startDate", "2026-07-01")
+                        .param("endDate", "2026-07-31"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40301));
+    }
+
+    @Test
+    void rejectsDirectReportRecordsForNonDirectLeader() throws Exception {
+        mockMvc.perform(get("/internal/attendance/records")
+                        .param("requesterId", "30")
+                        .param("targetEmployeeId", "10")
+                        .param("startDate", "2026-07-01")
+                        .param("endDate", "2026-07-31"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(40301));
+    }
+
+    @Test
     void directLeaderAssignsMonthlyMakeupQuotaAndEmployeeQueriesBalance() throws Exception {
         mockMvc.perform(put("/api/attendance/makeup-quotas/{employeeId}", 10)
                         .header(EMPLOYEE_HEADER, "20")

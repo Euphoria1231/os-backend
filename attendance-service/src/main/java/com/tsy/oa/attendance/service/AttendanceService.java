@@ -183,6 +183,20 @@ public class AttendanceService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<AttendanceRecordResponse> listDirectReportRecords(
+            Long requesterId,
+            Long targetEmployeeId,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        if (requesterId.equals(targetEmployeeId)
+                || !requesterId.equals(employeeDirectory.findDirectLeaderId(targetEmployeeId))) {
+            throw new BusinessException(AttendanceErrorCode.NOT_DIRECT_LEADER);
+        }
+        return listRecords(targetEmployeeId, startDate, endDate);
+    }
+
     @Transactional
     public MakeupQuotaResponse assignMakeupQuota(
             Long leaderId,
