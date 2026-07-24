@@ -150,6 +150,18 @@
         WHERE leader_id = #{leaderId}
     </select>
 
+    <select id="countByDepartmentId" resultType="int">
+        SELECT COUNT(*)
+        FROM employee
+        WHERE department_id = #{departmentId}
+    </select>
+
+    <select id="countByPositionId" resultType="int">
+        SELECT COUNT(*)
+        FROM employee
+        WHERE position_id = #{positionId}
+    </select>
+
     <resultMap id="NameCountResultMap" type="com.tsy.oa.user.dashboard.dto.NameCountResponse">
         <constructor>
             <arg column="name" javaType="java.lang.String"/>

@@ -8,6 +8,7 @@ import com.tsy.oa.user.department.model.Department;
 import com.tsy.oa.user.employee.mapper.EmployeeMapper;
 import com.tsy.oa.user.employee.model.Employee;
 import com.tsy.oa.user.error.UserErrorCode;
+import com.tsy.oa.user.position.mapper.PositionMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +22,16 @@ public class DepartmentService {
 
     private final DepartmentMapper departmentMapper;
     private final EmployeeMapper employeeMapper;
+    private final PositionMapper positionMapper;
 
-    public DepartmentService(DepartmentMapper departmentMapper, EmployeeMapper employeeMapper) {
+    public DepartmentService(
+            DepartmentMapper departmentMapper,
+            EmployeeMapper employeeMapper,
+            PositionMapper positionMapper
+    ) {
         this.departmentMapper = departmentMapper;
         this.employeeMapper = employeeMapper;
+        this.positionMapper = positionMapper;
     }
 
     @Transactional
@@ -70,6 +77,11 @@ public class DepartmentService {
     @Transactional
     public void delete(Long id) {
         getById(id);
+        if (departmentMapper.countByParentId(id) > 0
+                || positionMapper.countByDepartmentId(id) > 0
+                || employeeMapper.countByDepartmentId(id) > 0) {
+            throw new BusinessException(UserErrorCode.DEPARTMENT_DELETE_CONFLICT);
+        }
         departmentMapper.deleteById(id);
     }
 

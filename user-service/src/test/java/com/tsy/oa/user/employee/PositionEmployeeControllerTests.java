@@ -81,6 +81,80 @@ class PositionEmployeeControllerTests {
     }
 
     @Test
+    void rejectsDeletingDepartmentWithAssignedEmployee() throws Exception {
+        long departmentId = createDepartment("研发部");
+        long positionId = createPosition(departmentId, "JAVA_DEV", "Java开发工程师");
+        long employeeId = createEmployee(
+                "E001", "employee", "Password123", departmentId, positionId
+        );
+
+        mockMvc.perform(delete("/api/user/departments/{id}", departmentId)
+                        .header("X-Employee-Id", 99L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40914));
+
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM department WHERE id = ?", Integer.class, departmentId
+        ));
+        assertEquals(departmentId, jdbcTemplate.queryForObject(
+                "SELECT department_id FROM employee WHERE id = ?", Long.class, employeeId
+        ));
+    }
+
+    @Test
+    void rejectsDeletingDepartmentWithUnassignedPosition() throws Exception {
+        long departmentId = createDepartment("研发部");
+        long positionId = createPosition(departmentId, "JAVA_DEV", "Java开发工程师");
+
+        mockMvc.perform(delete("/api/user/departments/{id}", departmentId)
+                        .header("X-Employee-Id", 99L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40914));
+
+        assertEquals(departmentId, jdbcTemplate.queryForObject(
+                "SELECT department_id FROM position WHERE id = ?", Long.class, positionId
+        ));
+    }
+
+    @Test
+    void rejectsDeletingDepartmentWithChildDepartment() throws Exception {
+        long parentDepartmentId = createDepartment("研发中心");
+        long childDepartmentId = createDepartment("研发一部");
+        jdbcTemplate.update(
+                "UPDATE department SET parent_id = ? WHERE id = ?",
+                parentDepartmentId,
+                childDepartmentId
+        );
+
+        mockMvc.perform(delete("/api/user/departments/{id}", parentDepartmentId)
+                        .header("X-Employee-Id", 99L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40914));
+
+        assertEquals(parentDepartmentId, jdbcTemplate.queryForObject(
+                "SELECT parent_id FROM department WHERE id = ?", Long.class, childDepartmentId
+        ));
+    }
+
+    @Test
+    void rejectsDeletingPositionWithAssignedEmployee() throws Exception {
+        long departmentId = createDepartment("研发部");
+        long positionId = createPosition(departmentId, "JAVA_DEV", "Java开发工程师");
+        long employeeId = createEmployee(
+                "E001", "employee", "Password123", departmentId, positionId
+        );
+
+        mockMvc.perform(delete("/api/user/positions/{id}", positionId)
+                        .header("X-Employee-Id", 99L))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40915));
+
+        assertEquals(positionId, jdbcTemplate.queryForObject(
+                "SELECT position_id FROM employee WHERE id = ?", Long.class, employeeId
+        ));
+    }
+
+    @Test
     void employeeCrudFlowHashesPasswordAndHidesItFromResponse() throws Exception {
         long departmentId = createDepartment("研发部");
         long positionId = createPosition(departmentId, "JAVA_DEV", "Java开发工程师");

@@ -22,4 +22,6 @@ public interface DepartmentMapper {
     int countByName(@Param("name") String name, @Param("excludeId") Long excludeId);
 
     int countByLeaderEmployeeId(Long leaderEmployeeId);
+
+    int countByParentId(Long parentId);
 }

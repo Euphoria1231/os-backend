@@ -88,4 +88,10 @@
         WHERE leader_employee_id = #{leaderEmployeeId}
     </select>
 
+    <select id="countByParentId" resultType="int">
+        SELECT COUNT(*)
+        FROM department
+        WHERE parent_id = #{parentId}
+    </select>
+
 </mapper>

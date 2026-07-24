@@ -49,6 +49,12 @@
         <if test="excludeId != null">AND id != #{excludeId}</if>
     </select>
 
+    <select id="countByDepartmentId" resultType="int">
+        SELECT COUNT(*)
+        FROM position
+        WHERE department_id = #{departmentId}
+    </select>
+
     <select id="countEmployeesOutsideDepartment" resultType="int">
         SELECT COUNT(*)
         FROM employee

@@ -2,6 +2,7 @@ package com.tsy.oa.user.position.service;
 
 import com.tsy.oa.common.exception.BusinessException;
 import com.tsy.oa.user.department.mapper.DepartmentMapper;
+import com.tsy.oa.user.employee.mapper.EmployeeMapper;
 import com.tsy.oa.user.error.UserErrorCode;
 import com.tsy.oa.user.position.dto.PositionRequest;
 import com.tsy.oa.user.position.dto.PositionResponse;
@@ -18,10 +19,16 @@ public class PositionService {
 
     private final PositionMapper positionMapper;
     private final DepartmentMapper departmentMapper;
+    private final EmployeeMapper employeeMapper;
 
-    public PositionService(PositionMapper positionMapper, DepartmentMapper departmentMapper) {
+    public PositionService(
+            PositionMapper positionMapper,
+            DepartmentMapper departmentMapper,
+            EmployeeMapper employeeMapper
+    ) {
         this.positionMapper = positionMapper;
         this.departmentMapper = departmentMapper;
+        this.employeeMapper = employeeMapper;
     }
 
     @Transactional
@@ -62,6 +69,9 @@ public class PositionService {
     @Transactional
     public void delete(Long id) {
         requirePosition(id);
+        if (employeeMapper.countByPositionId(id) > 0) {
+            throw new BusinessException(UserErrorCode.POSITION_DELETE_CONFLICT);
+        }
         positionMapper.deleteById(id);
     }
 

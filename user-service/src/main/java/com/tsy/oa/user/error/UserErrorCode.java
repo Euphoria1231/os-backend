@@ -25,7 +25,9 @@ public enum UserErrorCode implements ErrorCode {
     DEPARTMENT_LEADER_DEPARTMENT_MISMATCH(40910, "部门负责人必须是本部门在职员工"),
     SUPER_ADMIN_CANNOT_BE_BUSINESS_LEADER(40911, "超级管理员不能担任直属领导或部门负责人"),
     POSITION_DEPARTMENT_CHANGE_CONFLICT(40912, "岗位仍有关联员工，不能变更所属部门"),
-    BUSINESS_LEADER_DEPARTMENT_CHANGE_CONFLICT(40913, "员工仍是直属领导或部门负责人，不能调离部门或停用");
+    BUSINESS_LEADER_DEPARTMENT_CHANGE_CONFLICT(40913, "员工仍是直属领导或部门负责人，不能调离部门或停用"),
+    DEPARTMENT_DELETE_CONFLICT(40914, "部门仍有关联的下级部门、岗位或员工，不能删除"),
+    POSITION_DELETE_CONFLICT(40915, "岗位仍有关联员工，不能删除");
 
     private final int code;
     private final String message;

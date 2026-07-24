@@ -22,6 +22,8 @@ public interface EmployeeMapper {
     int countByUsername(@Param("username") String username, @Param("excludeId") Long excludeId);
     boolean hasRoleCode(@Param("employeeId") Long employeeId, @Param("roleCode") String roleCode);
     int countByLeaderId(Long leaderId);
+    int countByDepartmentId(Long departmentId);
+    int countByPositionId(Long positionId);
     long countEmployees();
     long countEnabledEmployees();
     long countDisabledEmployees();
