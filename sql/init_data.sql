@@ -5,7 +5,7 @@
 USE oa_user;
 
 INSERT INTO department (id, parent_id, name, leader_employee_id, sort_order, status)
-VALUES (1, 0, '综合管理部', 1, 1, 1),
+VALUES (1, 0, '综合管理部', NULL, 1, 1),
        (2, 0, '研发部', 2, 2, 1) AS incoming
 ON DUPLICATE KEY UPDATE
     parent_id = incoming.parent_id,
@@ -13,11 +13,12 @@ ON DUPLICATE KEY UPDATE
     sort_order = incoming.sort_order,
     status = incoming.status;
 
-INSERT INTO `position` (id, code, name, description, status)
-VALUES (1, 'SYSTEM_ADMIN', '系统管理员', '负责系统配置与权限管理', 1),
-       (2, 'DEPARTMENT_MANAGER', '部门主管', '负责团队管理与一级审批', 1),
-       (3, 'JAVA_ENGINEER', 'Java 开发工程师', '负责企业应用研发', 1) AS incoming
+INSERT INTO `position` (id, department_id, code, name, description, status)
+VALUES (1, 1, 'SYSTEM_ADMIN', '系统管理员', '负责系统配置与权限管理', 1),
+       (2, 2, 'DEPARTMENT_MANAGER', '部门主管', '负责团队管理与一级审批', 1),
+       (3, 2, 'JAVA_ENGINEER', 'Java 开发工程师', '负责企业应用研发', 1) AS incoming
 ON DUPLICATE KEY UPDATE
+    department_id = incoming.department_id,
     name = incoming.name,
     description = incoming.description,
     status = incoming.status;
@@ -136,6 +137,13 @@ VALUES (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7),
        (3, 15), (3, 16), (3, 17), (3, 18) AS incoming
 ON DUPLICATE KEY UPDATE
     role_id = incoming.role_id;
+
+INSERT IGNORE INTO role_api_permission (role_id, api_permission_id)
+SELECT r.id, p.id
+FROM sys_role r
+CROSS JOIN sys_api_permission p
+WHERE r.code = 'EMPLOYEE'
+  AND p.code IN ('FLOW_TASK_READ', 'FLOW_TASK_APPROVE');
 
 USE oa_notice;
 
