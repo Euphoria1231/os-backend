@@ -31,6 +31,7 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "家庭事务", LocalDateTime.now(), LocalDateTime.now()),
+                emptyAttendanceSource(),
                 failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
@@ -45,6 +46,7 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
+                emptyAttendanceSource(),
                 failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
@@ -60,6 +62,7 @@ class Task6IntelligenceAnalysisTests {
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 30L, List.of(20L, 30L), "LEAVE", "PENDING", "原因",
                         LocalDateTime.now(), LocalDateTime.now(), 1L),
+                emptyAttendanceSource(),
                 analysisService(AiCallStatus.SUCCESS, "可作为补充意见"), new AiPromptSanitizer()
         );
         assertThat(service.analyze(99L, 20L).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
@@ -67,6 +70,7 @@ class Task6IntelligenceAnalysisTests {
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 30L, List.of(20L, 30L), "LEAVE", "PENDING", "原因",
                         LocalDateTime.now(), LocalDateTime.now(), 1L),
+                emptyAttendanceSource(),
                 analysisService(AiCallStatus.FAILED, "upstream failure"), new AiPromptSanitizer()
         );
         assertThat(failed.analyze(99L, 20L).callStatus()).isEqualTo(AiCallStatus.FAILED);
@@ -77,6 +81,7 @@ class Task6IntelligenceAnalysisTests {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
+                emptyAttendanceSource(),
                 failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
@@ -252,6 +257,10 @@ class Task6IntelligenceAnalysisTests {
 
     private AiAnalysisService failingAiAnalysisService() {
         return analysisService(AiCallStatus.DEGRADED, "AI unavailable");
+    }
+
+    private AttendanceAnalysisSource emptyAttendanceSource() {
+        return (requesterId, targetEmployeeId, startDate, endDate) -> List.of();
     }
 
     private AiAnalysisService analysisService(AiCallStatus status, String displayText) {

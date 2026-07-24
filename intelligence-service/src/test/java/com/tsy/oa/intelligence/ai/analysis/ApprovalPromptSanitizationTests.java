@@ -9,6 +9,7 @@ import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,7 +27,10 @@ class ApprovalPromptSanitizationTests {
                 + "x".repeat(2500);
         ApprovalAnalysisService service = new ApprovalAnalysisService(id ->
                 new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(id, 10L, 20L, "LEAVE", "PENDING", reason,
-                        LocalDateTime.now(), LocalDateTime.now()), aiService, new AiPromptSanitizer());
+                        LocalDateTime.now(), LocalDateTime.now()),
+                (requesterId, targetEmployeeId, startDate, endDate) -> List.of(),
+                aiService,
+                new AiPromptSanitizer());
 
         service.analyze(99L, 20L);
 
