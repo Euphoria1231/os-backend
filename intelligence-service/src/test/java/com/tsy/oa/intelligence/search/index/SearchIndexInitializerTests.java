@@ -5,6 +5,7 @@ import com.tsy.oa.intelligence.search.config.ElasticsearchSearchProperties;
 import com.tsy.oa.intelligence.search.repository.RestElasticsearchGateway;
 import com.tsy.oa.intelligence.search.repository.ElasticsearchSearchIndexRepository;
 import com.tsy.oa.intelligence.search.model.ApplicationSearchDocument;
+import com.tsy.oa.intelligence.search.service.SearchIndexAdministrationService;
 import com.tsy.oa.intelligence.search.support.ElasticsearchStubServer;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
@@ -16,12 +17,16 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class SearchIndexInitializerTests {
 
     private ElasticsearchStubServer server;
     private RestClient restClient;
     private ElasticsearchSearchProperties properties;
+    private SearchIndexAdministrationService administrationService;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -30,6 +35,7 @@ class SearchIndexInitializerTests {
         properties = new ElasticsearchSearchProperties();
         properties.setNoticeIndex("oa-notices-v1");
         properties.setApplicationIndex("oa-applications-v1");
+        administrationService = mock(SearchIndexAdministrationService.class);
     }
 
     @AfterEach
@@ -42,7 +48,8 @@ class SearchIndexInitializerTests {
     void createsNoticeAndApplicationIndexesWithIkMappings() {
         SearchIndexInitializer initializer = new SearchIndexInitializer(
                 new RestElasticsearchGateway(restClient, new ObjectMapper()),
-                properties
+                properties,
+                administrationService
         );
 
         initializer.initialize();
@@ -61,6 +68,8 @@ class SearchIndexInitializerTests {
                 .contains("\"approverId\":{\"type\":\"long\"}")
                 .contains("\"approverIds\":{\"type\":\"long\"}")
                 .contains("\"sourceVersion\":{\"type\":\"long\"}");
+        verify(administrationService).rebuildNotices();
+        verify(administrationService).rebuildApplications();
     }
 
     @Test
@@ -68,7 +77,8 @@ class SearchIndexInitializerTests {
         server.setAnalyzerAvailable(false);
         SearchIndexInitializer initializer = new SearchIndexInitializer(
                 new RestElasticsearchGateway(restClient, new ObjectMapper()),
-                properties
+                properties,
+                administrationService
         );
 
         assertThatThrownBy(initializer::initialize)
@@ -90,7 +100,7 @@ class SearchIndexInitializerTests {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         RestElasticsearchGateway gateway = new RestElasticsearchGateway(restClient, objectMapper);
 
-        new SearchIndexInitializer(gateway, properties).initialize();
+        new SearchIndexInitializer(gateway, properties, administrationService).initialize();
 
         assertThat(server.mappingRequests())
                 .anyMatch(request -> request.startsWith("oa-applications-v1\n")
@@ -123,7 +133,8 @@ class SearchIndexInitializerTests {
 
         new SearchIndexInitializer(
                 new RestElasticsearchGateway(restClient, new ObjectMapper()),
-                properties
+                properties,
+                administrationService
         ).initialize();
 
         assertThat(server.mappingRequests())
@@ -144,12 +155,28 @@ class SearchIndexInitializerTests {
         server.attachAlias("oa-applications", "oa-applications-rebuild-current");
         SearchIndexInitializer initializer = new SearchIndexInitializer(
                 new RestElasticsearchGateway(restClient, new ObjectMapper()),
-                properties
+                properties,
+                administrationService
         );
 
         initializer.initialize();
 
         assertThat(server.aliasTarget("oa-notices")).isEqualTo("oa-notices-rebuild-current");
         assertThat(server.aliasTarget("oa-applications")).isEqualTo("oa-applications-rebuild-current");
+    }
+
+    @Test
+    void doesNotRebuildWhenStableIndexesAlreadyExist() throws Exception {
+        server.seedIndexDefinition("oa-notices-v1", SearchIndexSchema.NOTICE_DEFINITION);
+        server.seedIndexDefinition("oa-applications-v1", SearchIndexSchema.APPLICATION_DEFINITION);
+        SearchIndexInitializer initializer = new SearchIndexInitializer(
+                new RestElasticsearchGateway(restClient, new ObjectMapper()),
+                properties,
+                administrationService
+        );
+
+        initializer.initialize();
+
+        verifyNoInteractions(administrationService);
     }
 }

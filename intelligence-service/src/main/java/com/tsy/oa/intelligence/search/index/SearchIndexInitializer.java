@@ -2,6 +2,7 @@ package com.tsy.oa.intelligence.search.index;
 
 import com.tsy.oa.intelligence.search.config.ElasticsearchSearchProperties;
 import com.tsy.oa.intelligence.search.repository.ElasticsearchGateway;
+import com.tsy.oa.intelligence.search.service.SearchIndexAdministrationService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,13 +25,16 @@ public class SearchIndexInitializer implements ApplicationRunner {
 
     private final ElasticsearchGateway gateway;
     private final ElasticsearchSearchProperties properties;
+    private final SearchIndexAdministrationService administrationService;
 
     public SearchIndexInitializer(
             ElasticsearchGateway gateway,
-            ElasticsearchSearchProperties properties
+            ElasticsearchSearchProperties properties,
+            SearchIndexAdministrationService administrationService
     ) {
         this.gateway = gateway;
         this.properties = properties;
+        this.administrationService = administrationService;
     }
 
     @Override
@@ -41,11 +45,21 @@ public class SearchIndexInitializer implements ApplicationRunner {
     public void initialize() {
         try {
             verifyRequiredAnalyzers();
-            createIndexIfMissing(properties.getNoticeIndex(), SearchIndexSchema.NOTICE_DEFINITION);
-            createIndexIfMissing(properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_DEFINITION);
+            boolean noticeIndexCreated = createIndexIfMissing(
+                    properties.getNoticeIndex(), SearchIndexSchema.NOTICE_DEFINITION
+            );
+            boolean applicationIndexCreated = createIndexIfMissing(
+                    properties.getApplicationIndex(), SearchIndexSchema.APPLICATION_DEFINITION
+            );
             attachAliasIfMissing(properties.getNoticeAlias(), properties.getNoticeIndex());
             attachAliasIfMissing(properties.getApplicationAlias(), properties.getApplicationIndex());
             migrateApplicationMappings();
+            if (noticeIndexCreated) {
+                administrationService.rebuildNotices();
+            }
+            if (applicationIndexCreated) {
+                administrationService.rebuildApplications();
+            }
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize Elasticsearch search indexes", exception);
         }
@@ -62,10 +76,12 @@ public class SearchIndexInitializer implements ApplicationRunner {
         }
     }
 
-    private void createIndexIfMissing(String indexName, String definition) throws IOException {
+    private boolean createIndexIfMissing(String indexName, String definition) throws IOException {
         if (!gateway.indexExists(indexName)) {
             gateway.createIndex(indexName, definition);
+            return true;
         }
+        return false;
     }
 
     private void migrateApplicationMappings() throws IOException {
