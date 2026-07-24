@@ -16,7 +16,7 @@ public class AttendanceClockProperties {
     private LocalTime morningEndTime = LocalTime.of(12, 0);
     private LocalTime afternoonStartTime = LocalTime.of(14, 0);
     private LocalTime workEndTime = LocalTime.of(17, 0);
-    private int lateThresholdMinutes;
+    private int lateThresholdMinutes = 30;
     private Duration lockTtl = Duration.ofSeconds(10);
     private Duration completedMarkerTtl = Duration.ofHours(36);
 

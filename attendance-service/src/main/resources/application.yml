@@ -54,7 +54,7 @@ attendance:
     morning-end-time: ${ATTENDANCE_MORNING_END_TIME:12:00}
     afternoon-start-time: ${ATTENDANCE_AFTERNOON_START_TIME:14:00}
     work-end-time: ${ATTENDANCE_WORK_END_TIME:17:00}
-    late-threshold-minutes: ${ATTENDANCE_LATE_THRESHOLD_MINUTES:0}
+    late-threshold-minutes: ${ATTENDANCE_LATE_THRESHOLD_MINUTES:30}
     lock-ttl: ${ATTENDANCE_LOCK_TTL:PT10S}
     completed-marker-ttl: ${ATTENDANCE_COMPLETED_MARKER_TTL:PT36H}
   geofence:

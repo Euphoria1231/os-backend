@@ -175,6 +175,33 @@ class AttendanceControllerTests {
     }
 
     @Test
+    void marksClockInAtWorkStartAsNormal() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T01:00:00Z"));
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("NORMAL"));
+    }
+
+    @Test
+    void marksClockInAtThirtyMinuteBoundaryAsLate() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T01:30:00Z"));
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+    }
+
+    @Test
+    void marksClockInAfterThirtyMinuteBoundaryAsAbsent() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T01:30:01Z"));
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("ABSENT"));
+    }
+
+    @Test
     void marksClockOutBeforeWorkEndAsEarlyLeave() throws Exception {
         clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
         mockMvc.perform(clockInRequest("10"))

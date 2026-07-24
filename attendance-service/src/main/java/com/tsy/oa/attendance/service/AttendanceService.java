@@ -36,7 +36,9 @@ public class AttendanceService {
 
     private static final String CLOCK_IN = "CLOCK_IN";
     private static final String CLOCK_OUT = "CLOCK_OUT";
+    private static final String NORMAL = "NORMAL";
     private static final String LATE = "LATE";
+    private static final String ABSENT = "ABSENT";
     private static final String EARLY_LEAVE = "EARLY_LEAVE";
 
     private final AttendanceMapper attendanceMapper;
@@ -306,10 +308,15 @@ public class AttendanceService {
     }
 
     private String resolveClockInStatus(LocalDateTime now) {
-        boolean late = now.toLocalTime().isAfter(
-                clockProperties.getWorkStartTime().plusMinutes(clockProperties.getLateThresholdMinutes())
+        if (!now.toLocalTime().isAfter(clockProperties.getWorkStartTime())) {
+            return NORMAL;
+        }
+        boolean absent = now.toLocalTime().isAfter(
+                clockProperties.getWorkStartTime().plusMinutes(
+                        clockProperties.getLateThresholdMinutes()
+                )
         );
-        return late ? LATE : "NORMAL";
+        return absent ? ABSENT : LATE;
     }
 
     private boolean isEarlyLeave(LocalDateTime now) {
@@ -317,7 +324,7 @@ public class AttendanceService {
     }
 
     private String resolveClockOutStatus(String currentStatus, boolean earlyLeave) {
-        return earlyLeave && "NORMAL".equals(currentStatus)
+        return earlyLeave && NORMAL.equals(currentStatus)
                 ? EARLY_LEAVE
                 : currentStatus;
     }
