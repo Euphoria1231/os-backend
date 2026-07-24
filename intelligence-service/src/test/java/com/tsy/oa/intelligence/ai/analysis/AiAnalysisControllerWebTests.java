@@ -85,12 +85,12 @@ class AiAnalysisControllerWebTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.applicationId").value(1));
 
-        mockMvc.perform(post("/api/intelligence/ai/attendance/1/analysis")
+        mockMvc.perform(post("/api/intelligence/ai/attendance/2/analysis")
                         .header("X-Employee-Id", "1")
                         .header("X-Roles", "EMPLOYEE")
                         .param("month", "2026-07"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.employeeId").value(1));
+                .andExpect(jsonPath("$.data.employeeId").value(2));
 
         org.assertj.core.api.Assertions.assertThat(
                 operationLogs.count("AI_ANALYSIS", "SUCCESS")
@@ -101,8 +101,11 @@ class AiAnalysisControllerWebTests {
     static class TestBeans {
         @Bean @Primary ApplicationAnalysisSource applicationAnalysisSource() {
             return id -> new com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
-                    id, 1L, 2L, "LEAVE", "PENDING", "reason", LocalDateTime.now(), LocalDateTime.now()); }
-        @Bean @Primary AttendanceAnalysisSource attendanceAnalysisSource() { return (id, start, end) -> List.of(); }
+                    id, 10L, 2L, List.of(1L, 2L), "LEAVE", "PENDING", "reason",
+                    LocalDateTime.now(), LocalDateTime.now(), 1L); }
+        @Bean @Primary AttendanceAnalysisSource attendanceAnalysisSource() {
+            return (requesterId, targetEmployeeId, start, end) -> List.of();
+        }
         @Bean @Primary AiProvider testAiProvider() { return prompt -> new AiCallResult(AiCallStatus.SUCCESS, "safe advice"); }
     }
 }

@@ -14,7 +14,6 @@ import java.util.List;
 @Service
 public class ApprovalAnalysisService {
 
-    private static final String SUPER_ADMIN = "SUPER_ADMIN";
     private final ApplicationAnalysisSource source;
     private final AiAnalysisService aiAnalysisService;
     private final AiPromptSanitizer promptSanitizer;
@@ -26,12 +25,13 @@ public class ApprovalAnalysisService {
         this.promptSanitizer = promptSanitizer;
     }
 
-    public ApprovalAnalysisResponse analyze(long applicationId, long employeeId, List<String> roles) {
+    public ApprovalAnalysisResponse analyze(long applicationId, long employeeId) {
         ApplicationSearchSourceClient.ApplicationSearchSourceResponse application = source.findById(applicationId);
         if (application == null) {
             throw new BusinessException(CommonErrorCode.NOT_FOUND);
         }
-        if (!hasRole(roles, SUPER_ADMIN) && employeeId != application.applicantId() && employeeId != application.approverId()) {
+        List<Long> approverIds = application.approverIds();
+        if (approverIds == null || !approverIds.contains(employeeId)) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
         String summary = "申请类型：" + application.applicationType() + "；状态：" + application.status()
@@ -49,7 +49,4 @@ public class ApprovalAnalysisService {
         return new ApprovalAnalysisResponse(analysis.analysisId(), result.status(), applicationId, summary, warnings, advice, "仅供参考");
     }
 
-    private boolean hasRole(List<String> roles, String role) {
-        return roles != null && roles.stream().anyMatch(role::equals);
-    }
 }

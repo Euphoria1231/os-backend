@@ -9,7 +9,6 @@ import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,7 +28,7 @@ class ApprovalPromptSanitizationTests {
                 new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(id, 10L, 20L, "LEAVE", "PENDING", reason,
                         LocalDateTime.now(), LocalDateTime.now()), aiService, new AiPromptSanitizer());
 
-        service.analyze(99L, 10L, List.of("EMPLOYEE"));
+        service.analyze(99L, 20L);
 
         String prompt = captured.get().content();
         assertThat(prompt).doesNotContain("ab~+/=cd", "sk-live-value", "hunter2", "abcd", "json-secret",

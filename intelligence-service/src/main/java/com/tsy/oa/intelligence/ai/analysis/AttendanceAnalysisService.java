@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class AttendanceAnalysisService {
-    private static final String SUPER_ADMIN = "SUPER_ADMIN";
     private final AttendanceAnalysisSource source;
     private final AiAnalysisService aiAnalysisService;
 
@@ -26,12 +25,17 @@ public class AttendanceAnalysisService {
         this.aiAnalysisService = aiAnalysisService;
     }
 
-    public AttendanceAnalysisResponse analyze(long targetEmployeeId, long requesterId, List<String> roles, String month) {
-        if (targetEmployeeId != requesterId && !hasRole(roles, SUPER_ADMIN)) {
+    public AttendanceAnalysisResponse analyze(long targetEmployeeId, long requesterId, String month) {
+        if (targetEmployeeId == requesterId) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
         }
         YearMonth parsedMonth = parseMonth(month);
-        List<AttendanceSourceRecord> records = source.findRecords(targetEmployeeId, parsedMonth.atDay(1), parsedMonth.atEndOfMonth());
+        List<AttendanceSourceRecord> records = source.findRecords(
+                requesterId,
+                targetEmployeeId,
+                parsedMonth.atDay(1),
+                parsedMonth.atEndOfMonth()
+        );
         Map<String, Long> abnormalities = records.stream()
                 .filter(record -> record.attendanceStatus() != null && !"NORMAL".equalsIgnoreCase(record.attendanceStatus()))
                 .collect(Collectors.groupingBy(AttendanceSourceRecord::attendanceStatus, Collectors.counting()));
@@ -53,5 +57,4 @@ public class AttendanceAnalysisService {
         try { return YearMonth.parse(month, DateTimeFormatter.ofPattern("yyyy-MM")); }
         catch (DateTimeParseException exception) { throw new BusinessException(CommonErrorCode.BAD_REQUEST); }
     }
-    private boolean hasRole(List<String> roles, String role) { return roles != null && roles.stream().anyMatch(role::equals); }
 }

@@ -5,5 +5,10 @@ import java.util.List;
 
 @FunctionalInterface
 public interface AttendanceAnalysisSource {
-    List<AttendanceSourceRecord> findRecords(long employeeId, LocalDate startDate, LocalDate endDate);
+    List<AttendanceSourceRecord> findRecords(
+            long requesterId,
+            long targetEmployeeId,
+            LocalDate startDate,
+            LocalDate endDate
+    );
 }

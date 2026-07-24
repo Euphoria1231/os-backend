@@ -28,7 +28,6 @@ public class AiAnalysisController {
     @PostMapping("/approvals/{applicationId}/analysis")
     public ApiResponse<ApprovalAnalysisResponse> approval(@PathVariable @Min(1) long applicationId,
             @RequestHeader("X-Employee-Id") @Min(1) long employeeId,
-            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
             HttpServletRequest httpRequest) {
         OperationLogContext context = logContext(
                 httpRequest, employeeId, "APPROVAL_APPLICATION",
@@ -36,12 +35,11 @@ public class AiAnalysisController {
         );
         return ApiResponse.success(operationLogger.execute(
                 context,
-                () -> approvalService.analyze(applicationId, employeeId, roles)
+                () -> approvalService.analyze(applicationId, employeeId)
         )); }
     @PostMapping("/attendance/{employeeId}/analysis")
     public ApiResponse<AttendanceAnalysisResponse> attendance(@PathVariable @Min(1) long employeeId,
             @RequestHeader("X-Employee-Id") @Min(1) long requesterId,
-            @RequestHeader(value = "X-Roles", defaultValue = "") List<String> roles,
             @RequestParam String month, HttpServletRequest httpRequest) {
         OperationLogContext context = logContext(
                 httpRequest, requesterId, "EMPLOYEE",
@@ -49,7 +47,7 @@ public class AiAnalysisController {
         );
         return ApiResponse.success(operationLogger.execute(
                 context,
-                () -> attendanceService.analyze(employeeId, requesterId, roles, month)
+                () -> attendanceService.analyze(employeeId, requesterId, month)
         )); }
     @PostMapping("/office/ask")
     public ApiResponse<OfficeQuestionResponse> ask(@RequestHeader("X-Employee-Id") @Min(1) long employeeId,

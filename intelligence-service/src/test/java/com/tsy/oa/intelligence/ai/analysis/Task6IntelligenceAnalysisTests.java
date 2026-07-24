@@ -11,11 +11,15 @@ import com.tsy.oa.intelligence.ai.service.AiAnalysisService;
 import com.tsy.oa.intelligence.ai.service.AiAnalysisRequest;
 import com.tsy.oa.intelligence.ai.persistence.AiAnalysisRecord;
 import com.tsy.oa.intelligence.search.event.source.ApplicationSearchSourceClient;
+import feign.FeignException;
+import feign.Request;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,21 +27,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class Task6IntelligenceAnalysisTests {
 
     @Test
-    void approvalAnalysisAllowsApplicantAndReturnsReferenceOnlyDegradedAdvice() {
+    void approvalAnalysisRejectsApplicantWhoDidNotApprove() {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "家庭事务", LocalDateTime.now(), LocalDateTime.now()),
                 failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
-        ApprovalAnalysisResponse response = service.analyze(99L, 10L, List.of("EMPLOYEE"));
-
-        assertThat(response.callStatus()).isEqualTo(AiCallStatus.DEGRADED);
-        assertThat(response.applicationId()).isEqualTo(99L);
-        assertThat(response.applicationSummary()).contains("LEAVE", "PENDING");
-        assertThat(response.riskWarnings()).isNotEmpty();
-        assertThat(response.suggestedDecision()).contains("仅供参考").doesNotContain("同意", "驳回");
-        assertThat(response.disclaimer()).isEqualTo("仅供参考");
+        assertThatThrownBy(() -> service.analyze(99L, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -48,60 +48,83 @@ class Task6IntelligenceAnalysisTests {
                 failingAiAnalysisService(), new AiPromptSanitizer()
         );
 
-        assertThatThrownBy(() -> service.analyze(99L, 30L, List.of("EMPLOYEE")))
+        assertThatThrownBy(() -> service.analyze(99L, 30L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).errorCode())
                 .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     @Test
-    void approvalAnalysisAllowsCurrentApproverAndSuperAdminAndPreservesProviderStatuses() {
+    void approvalAnalysisAllowsParticipantFromFullApproverListAndPreservesProviderStatuses() {
+        ApprovalAnalysisService service = new ApprovalAnalysisService(
+                applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
+                        applicationId, 10L, 30L, List.of(20L, 30L), "LEAVE", "PENDING", "原因",
+                        LocalDateTime.now(), LocalDateTime.now(), 1L),
+                analysisService(AiCallStatus.SUCCESS, "可作为补充意见"), new AiPromptSanitizer()
+        );
+        assertThat(service.analyze(99L, 20L).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
+        ApprovalAnalysisService failed = new ApprovalAnalysisService(
+                applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
+                        applicationId, 10L, 30L, List.of(20L, 30L), "LEAVE", "PENDING", "原因",
+                        LocalDateTime.now(), LocalDateTime.now(), 1L),
+                analysisService(AiCallStatus.FAILED, "upstream failure"), new AiPromptSanitizer()
+        );
+        assertThat(failed.analyze(99L, 20L).callStatus()).isEqualTo(AiCallStatus.FAILED);
+    }
+
+    @Test
+    void approvalAnalysisRejectsSuperAdminWithoutParticipation() {
         ApprovalAnalysisService service = new ApprovalAnalysisService(
                 applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
                         applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
-                analysisService(AiCallStatus.SUCCESS, "可作为补充意见"), new AiPromptSanitizer()
+                failingAiAnalysisService(), new AiPromptSanitizer()
         );
-        assertThat(service.analyze(99L, 20L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
-        assertThat(service.analyze(99L, 1L, List.of("SUPER_ADMIN")).callStatus()).isEqualTo(AiCallStatus.SUCCESS);
-        ApprovalAnalysisService failed = new ApprovalAnalysisService(
-                applicationId -> new ApplicationSearchSourceClient.ApplicationSearchSourceResponse(
-                        applicationId, 10L, 20L, "LEAVE", "PENDING", "原因", LocalDateTime.now(), LocalDateTime.now()),
-                analysisService(AiCallStatus.FAILED, "upstream failure"), new AiPromptSanitizer()
-        );
-        assertThat(failed.analyze(99L, 10L, List.of("EMPLOYEE")).callStatus()).isEqualTo(AiCallStatus.FAILED);
+
+        assertThatThrownBy(() -> service.analyze(99L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     @Test
     void attendanceAnalysisUsesOnlyReturnedExplicitAbnormalStatusesAndValidatesMonth() {
         AttendanceAnalysisService service = new AttendanceAnalysisService(
-                (employeeId, startDate, endDate) -> List.of(
-                        new AttendanceSourceRecord(employeeId, LocalDate.of(2026, 7, 2), "LATE"),
-                        new AttendanceSourceRecord(employeeId, LocalDate.of(2026, 7, 3), "MISSING_CLOCK_OUT")
+                (requesterId, targetEmployeeId, startDate, endDate) -> List.of(
+                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 2), "LATE"),
+                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 3), "MISSING_CLOCK_OUT")
                 ),
                 failingAiAnalysisService()
         );
 
-        AttendanceAnalysisResponse response = service.analyze(10L, 10L, List.of("EMPLOYEE"), "2026-07");
+        AttendanceAnalysisResponse response = service.analyze(10L, 20L, "2026-07");
 
         assertThat(response.riskLevel()).isEqualTo("MEDIUM");
         assertThat(response.abnormalSummary()).contains("LATE", "MISSING_CLOCK_OUT");
-        assertThatThrownBy(() -> service.analyze(10L, 10L, List.of(), "2026-7"))
+        assertThatThrownBy(() -> service.analyze(10L, 20L, "2026-7"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).errorCode())
                 .isEqualTo(CommonErrorCode.BAD_REQUEST);
     }
 
     @Test
-    void attendanceAnalysisUsesFirstAndLastNaturalDayAndRejectsOtherEmployee() {
+    void attendanceAnalysisPassesRequesterAndTargetAndRejectsSelf() {
+        final long[] employeeIds = new long[2];
         final LocalDate[] range = new LocalDate[2];
         AttendanceAnalysisService service = new AttendanceAnalysisService(
-                (employeeId, startDate, endDate) -> { range[0] = startDate; range[1] = endDate; return List.of(); },
+                (requesterId, targetEmployeeId, startDate, endDate) -> {
+                    employeeIds[0] = requesterId;
+                    employeeIds[1] = targetEmployeeId;
+                    range[0] = startDate;
+                    range[1] = endDate;
+                    return List.of();
+                },
                 failingAiAnalysisService()
         );
-        service.analyze(10L, 10L, List.of("EMPLOYEE"), "2026-02");
+        service.analyze(10L, 20L, "2026-02");
+        assertThat(employeeIds).containsExactly(20L, 10L);
         assertThat(range[0]).isEqualTo(LocalDate.of(2026, 2, 1));
         assertThat(range[1]).isEqualTo(LocalDate.of(2026, 2, 28));
-        assertThatThrownBy(() -> service.analyze(10L, 11L, List.of("DEPARTMENT_MANAGER"), "2026-02"))
+        assertThatThrownBy(() -> service.analyze(10L, 10L, "2026-02"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).errorCode())
                 .isEqualTo(CommonErrorCode.FORBIDDEN);
@@ -192,18 +215,39 @@ class Task6IntelligenceAnalysisTests {
 
     @Test
     void feignAttendanceSourceRejectsMissingOrInvalidUpstreamPayloadButAllowsEmptyMonth() {
-        AttendanceSourceClient nullResponse = (employeeId, startDate, endDate) -> null;
-        AttendanceSourceClient failedResponse = (employeeId, startDate, endDate) -> ApiResponse.failure(CommonErrorCode.INTERNAL_SERVER_ERROR);
-        AttendanceSourceClient nullData = (employeeId, startDate, endDate) -> new ApiResponse<>(0, "success", null);
-        AttendanceSourceClient emptyMonth = (employeeId, startDate, endDate) -> ApiResponse.success(List.of());
+        AttendanceSourceClient nullResponse = (requesterId, targetEmployeeId, startDate, endDate) -> null;
+        AttendanceSourceClient failedResponse = (requesterId, targetEmployeeId, startDate, endDate) -> ApiResponse.failure(CommonErrorCode.INTERNAL_SERVER_ERROR);
+        AttendanceSourceClient nullData = (requesterId, targetEmployeeId, startDate, endDate) -> new ApiResponse<>(0, "success", null);
+        final long[] employeeIds = new long[2];
+        AttendanceSourceClient emptyMonth = (requesterId, targetEmployeeId, startDate, endDate) -> {
+            employeeIds[0] = requesterId;
+            employeeIds[1] = targetEmployeeId;
+            return ApiResponse.success(List.of());
+        };
+        AttendanceSourceClient forbidden = (requesterId, targetEmployeeId, startDate, endDate) -> {
+            Request request = Request.create(
+                    Request.HttpMethod.GET,
+                    "/internal/attendance/records",
+                    Map.of(),
+                    null,
+                    StandardCharsets.UTF_8
+            );
+            throw new FeignException.Forbidden("Forbidden", request, null, Map.of());
+        };
 
-        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullResponse).findRecords(1L, LocalDate.now(), LocalDate.now()))
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullResponse).findRecords(20L, 10L, LocalDate.now(), LocalDate.now()))
                 .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(failedResponse).findRecords(1L, LocalDate.now(), LocalDate.now()))
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(failedResponse).findRecords(20L, 10L, LocalDate.now(), LocalDate.now()))
                 .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullData).findRecords(1L, LocalDate.now(), LocalDate.now()))
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(nullData).findRecords(20L, 10L, LocalDate.now(), LocalDate.now()))
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(new FeignAttendanceAnalysisSource(emptyMonth).findRecords(1L, LocalDate.now(), LocalDate.now())).isEmpty();
+        assertThat(new FeignAttendanceAnalysisSource(emptyMonth).findRecords(20L, 10L, LocalDate.now(), LocalDate.now())).isEmpty();
+        assertThat(employeeIds).containsExactly(20L, 10L);
+        assertThatThrownBy(() -> new FeignAttendanceAnalysisSource(forbidden)
+                .findRecords(20L, 10L, LocalDate.now(), LocalDate.now()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).errorCode())
+                .isEqualTo(CommonErrorCode.FORBIDDEN);
     }
 
     private AiAnalysisService failingAiAnalysisService() {
