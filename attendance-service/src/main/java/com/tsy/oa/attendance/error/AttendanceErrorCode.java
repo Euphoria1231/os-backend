@@ -6,15 +6,17 @@ public enum AttendanceErrorCode implements ErrorCode {
 
     NOT_DIRECT_LEADER(40301, "当前员工不是目标员工的直属领导"),
     RECORD_NOT_FOUND(40401, "当日考勤记录不存在"),
-    ALREADY_CLOCKED_IN(40901, "今日已经完成上班打卡"),
-    ALREADY_CLOCKED_OUT(40902, "今日已经完成下班打卡"),
-    CLOCK_IN_REQUIRED(40903, "请先完成上班打卡"),
+    ALREADY_CLOCKED_IN(40901, "今日已经完成上午打卡"),
+    ALREADY_CLOCKED_OUT(40902, "今日已经完成下午打卡"),
+    CLOCK_IN_REQUIRED(40903, "请先完成上午打卡"),
     OPERATION_BUSY(40904, "打卡操作处理中，请稍后重试"),
     MAKEUP_QUOTA_BELOW_USED(40905, "补签总次数不能小于已使用次数"),
     MAKEUP_QUOTA_UNAVAILABLE(40906, "当月无可用补签次数"),
     MAKEUP_APPLICATION_CONFLICT(40907, "补签申请与考勤记录不匹配"),
     MAKEUP_REQUIRES_LATE_RECORD(42201, "只有迟到考勤记录可以申请补签"),
-    OUTSIDE_CLOCK_AREA(42202, "当前位置不在允许打卡范围内");
+    OUTSIDE_CLOCK_AREA(42202, "当前位置不在允许打卡范围内"),
+    MORNING_CLOCK_CLOSED(42203, "上午打卡时段已结束"),
+    AFTERNOON_CLOCK_NOT_OPEN(42204, "下午打卡尚未开始");
 
     private final int code;
     private final String message;

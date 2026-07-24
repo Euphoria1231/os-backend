@@ -37,9 +37,9 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO attendance_record (
-            employee_id, attendance_date, clock_in_time, attendance_status
+            employee_id, attendance_date, clock_in_time, clock_out_time, attendance_status
         ) VALUES (
-            #{employeeId}, #{attendanceDate}, #{clockInTime}, #{attendanceStatus}
+            #{employeeId}, #{attendanceDate}, #{clockInTime}, #{clockOutTime}, #{attendanceStatus}
         )
     </insert>
 

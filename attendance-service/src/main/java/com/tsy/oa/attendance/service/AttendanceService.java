@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -39,7 +40,6 @@ public class AttendanceService {
     private static final String NORMAL = "NORMAL";
     private static final String LATE = "LATE";
     private static final String ABSENT = "ABSENT";
-    private static final String EARLY_LEAVE = "EARLY_LEAVE";
 
     private final AttendanceMapper attendanceMapper;
     private final AttendanceRedisGuard redisGuard;
@@ -77,6 +77,9 @@ public class AttendanceService {
     ) {
         geofenceService.requireInside(location);
         LocalDateTime now = LocalDateTime.now(clock);
+        if (!now.toLocalTime().isBefore(clockProperties.getAfternoonClockStartTime())) {
+            throw new BusinessException(AttendanceErrorCode.MORNING_CLOCK_CLOSED);
+        }
         LocalDate date = now.toLocalDate();
         if (redisGuard.isCompleted(employeeId, date, CLOCK_IN)) {
             throw new BusinessException(AttendanceErrorCode.ALREADY_CLOCKED_IN);
@@ -97,7 +100,7 @@ public class AttendanceService {
             attendanceMapper.insert(record);
             if (LATE.equals(record.getAttendanceStatus())) {
                 publishAttendanceAbnormal(
-                        record.getId(), employeeId, "late", "迟到", "上班", now
+                        record.getId(), employeeId, "morning-late", "迟到", "上午", now
                 );
             }
             redisGuard.markCompleted(
@@ -116,6 +119,9 @@ public class AttendanceService {
     ) {
         geofenceService.requireInside(location);
         LocalDateTime now = LocalDateTime.now(clock);
+        if (now.toLocalTime().isBefore(clockProperties.getAfternoonClockStartTime())) {
+            throw new BusinessException(AttendanceErrorCode.AFTERNOON_CLOCK_NOT_OPEN);
+        }
         LocalDate date = now.toLocalDate();
         if (redisGuard.isCompleted(employeeId, date, CLOCK_OUT)) {
             throw new BusinessException(AttendanceErrorCode.ALREADY_CLOCKED_OUT);
@@ -124,24 +130,29 @@ public class AttendanceService {
         LockToken lockToken = acquireLock(employeeId, date, CLOCK_OUT);
         try {
             AttendanceRecord record = attendanceMapper.findByEmployeeAndDate(employeeId, date);
-            if (record == null || record.getClockInTime() == null) {
-                throw new BusinessException(AttendanceErrorCode.CLOCK_IN_REQUIRED);
-            }
-            if (record.getClockOutTime() != null) {
-                throw new BusinessException(AttendanceErrorCode.ALREADY_CLOCKED_OUT);
-            }
-            boolean earlyLeave = isEarlyLeave(now);
-            String clockOutStatus = resolveClockOutStatus(
-                    record.getAttendanceStatus(), earlyLeave
+            String afternoonStatus = resolveClockStatus(
+                    now, clockProperties.getAfternoonStartTime()
             );
-            attendanceMapper.updateClockOut(
-                    record.getId(),
-                    now,
-                    clockOutStatus
-            );
-            if (earlyLeave) {
+            if (record == null) {
+                record = new AttendanceRecord();
+                record.setEmployeeId(employeeId);
+                record.setAttendanceDate(date);
+                record.setClockOutTime(now);
+                record.setAttendanceStatus(ABSENT);
+                attendanceMapper.insert(record);
+            } else {
+                if (record.getClockOutTime() != null) {
+                    throw new BusinessException(AttendanceErrorCode.ALREADY_CLOCKED_OUT);
+                }
+                attendanceMapper.updateClockOut(
+                        record.getId(),
+                        now,
+                        resolveDailyStatus(record.getAttendanceStatus(), afternoonStatus)
+                );
+            }
+            if (LATE.equals(afternoonStatus)) {
                 publishAttendanceAbnormal(
-                        record.getId(), employeeId, "early-leave", "早退", "下班", now
+                        record.getId(), employeeId, "afternoon-late", "迟到", "下午", now
                 );
             }
             redisGuard.markCompleted(
@@ -322,25 +333,29 @@ public class AttendanceService {
     }
 
     private String resolveClockInStatus(LocalDateTime now) {
-        if (!now.toLocalTime().isAfter(clockProperties.getWorkStartTime())) {
+        return resolveClockStatus(now, clockProperties.getWorkStartTime());
+    }
+
+    private String resolveClockStatus(LocalDateTime now, LocalTime startTime) {
+        if (!now.toLocalTime().isAfter(startTime)) {
             return NORMAL;
         }
         boolean absent = now.toLocalTime().isAfter(
-                clockProperties.getWorkStartTime().plusMinutes(
+                startTime.plusMinutes(
                         clockProperties.getLateThresholdMinutes()
                 )
         );
         return absent ? ABSENT : LATE;
     }
 
-    private boolean isEarlyLeave(LocalDateTime now) {
-        return now.toLocalTime().isBefore(clockProperties.getWorkEndTime());
-    }
-
-    private String resolveClockOutStatus(String currentStatus, boolean earlyLeave) {
-        return earlyLeave && NORMAL.equals(currentStatus)
-                ? EARLY_LEAVE
-                : currentStatus;
+    private String resolveDailyStatus(String morningStatus, String afternoonStatus) {
+        if (ABSENT.equals(morningStatus) || ABSENT.equals(afternoonStatus)) {
+            return ABSENT;
+        }
+        if (LATE.equals(morningStatus) || LATE.equals(afternoonStatus)) {
+            return LATE;
+        }
+        return NORMAL.equals(morningStatus) ? afternoonStatus : morningStatus;
     }
 
     private void publishAttendanceAbnormal(

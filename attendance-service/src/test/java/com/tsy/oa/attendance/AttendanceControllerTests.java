@@ -38,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -95,10 +96,58 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.data.morningStartTime").value("09:00"))
                 .andExpect(jsonPath("$.data.morningEndTime").value("12:00"))
                 .andExpect(jsonPath("$.data.afternoonStartTime").value("14:00"))
+                .andExpect(jsonPath("$.data.afternoonClockStartTime").value("13:30"))
                 .andExpect(jsonPath("$.data.afternoonEndTime").value("17:00"))
                 .andExpect(jsonPath("$.data.centerLongitude").value(119.411209))
                 .andExpect(jsonPath("$.data.centerLatitude").value(26.022543))
                 .andExpect(jsonPath("$.data.radiusMeters").value(1000));
+    }
+
+    @Test
+    void rejectsAfternoonClockBeforeAfternoonClockStart() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T05:29:00Z"));
+
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42204));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_record WHERE employee_id = ?",
+                Integer.class,
+                10L
+        ));
+    }
+
+    @Test
+    void rejectsMorningClockAtAfternoonClockStart() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T05:30:00Z"));
+
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value(42203));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_record WHERE employee_id = ?",
+                Integer.class,
+                10L
+        ));
+    }
+
+    @Test
+    void savesAfternoonClockWhenMorningClockIsMissing() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T05:30:00Z"));
+
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clockInTime").value(nullValue()))
+                .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T13:30:00"))
+                .andExpect(jsonPath("$.data.attendanceStatus").value("ABSENT"));
+
+        assertNull(jdbcTemplate.queryForObject(
+                "SELECT clock_in_time FROM attendance_record WHERE employee_id = ?",
+                LocalDateTime.class,
+                10L
+        ));
     }
 
     @Test
@@ -156,21 +205,23 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.data.attendanceDate").value("2026-07-20"))
                 .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
 
-        clock.setInstant(Instant.parse("2026-07-20T10:00:00Z"));
+        clock.setInstant(Instant.parse("2026-07-20T06:05:00Z"));
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T18:00:00"));
+                .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T14:05:00"))
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
 
         mockMvc.perform(get("/api/attendance/today").header(EMPLOYEE_HEADER, "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.clockInTime").value("2026-07-20T09:05:00"))
-                .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T18:00:00"));
+                .andExpect(jsonPath("$.data.clockOutTime").value("2026-07-20T14:05:00"));
 
         assertEquals(1, operationLogs.count("CLOCK_IN", "SUCCESS"));
         assertEquals(1, operationLogs.count("CLOCK_OUT", "SUCCESS"));
         Long recordId = recordId(10L);
         assertEquals(List.of(
-                "attendance:" + recordId + ":late:10:ATTENDANCE_ABNORMAL"
+                "attendance:" + recordId + ":morning-late:10:ATTENDANCE_ABNORMAL",
+                "attendance:" + recordId + ":afternoon-late:10:ATTENDANCE_ABNORMAL"
         ), notificationPublisher.summaries());
     }
 
@@ -202,21 +253,33 @@ class AttendanceControllerTests {
     }
 
     @Test
-    void marksClockOutBeforeWorkEndAsEarlyLeave() throws Exception {
+    void marksAfternoonClockAtThirtyMinuteBoundaryAsLate() throws Exception {
         clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.attendanceStatus").value("NORMAL"));
 
-        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        clock.setInstant(Instant.parse("2026-07-20T06:30:00Z"));
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.attendanceStatus").value("EARLY_LEAVE"));
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
 
         Long recordId = recordId(10L);
         assertEquals(List.of(
-                "attendance:" + recordId + ":early-leave:10:ATTENDANCE_ABNORMAL"
+                "attendance:" + recordId + ":afternoon-late:10:ATTENDANCE_ABNORMAL"
         ), notificationPublisher.summaries());
+    }
+
+    @Test
+    void marksAfternoonClockAfterThirtyMinuteBoundaryAsAbsent() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
+        mockMvc.perform(clockInRequest("10"))
+                .andExpect(status().isOk());
+
+        clock.setInstant(Instant.parse("2026-07-20T06:30:01Z"));
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attendanceStatus").value("ABSENT"));
     }
 
     @Test
@@ -247,7 +310,7 @@ class AttendanceControllerTests {
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk());
 
-        clock.setInstant(Instant.parse("2026-07-20T10:00:00Z"));
+        clock.setInstant(Instant.parse("2026-07-20T06:00:00Z"));
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.attendanceStatus").value("NORMAL"));
@@ -256,12 +319,12 @@ class AttendanceControllerTests {
     }
 
     @Test
-    void rollsBackEarlyClockOutWhenNotificationPublishingFails() throws Exception {
+    void rollsBackLateAfternoonClockWhenNotificationPublishingFails() throws Exception {
         clock.setInstant(Instant.parse("2026-07-20T00:55:00Z"));
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk());
 
-        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        clock.setInstant(Instant.parse("2026-07-20T06:05:00Z"));
         notificationPublisher.failNext();
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isInternalServerError())
@@ -283,42 +346,43 @@ class AttendanceControllerTests {
 
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.attendanceStatus").value("EARLY_LEAVE"));
+                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
     }
 
     @Test
-    void keepsLateStatusWhenClockOutIsAlsoEarly() throws Exception {
+    void keepsWorseMorningStatusWhenAfternoonClockIsNormal() throws Exception {
+        clock.setInstant(Instant.parse("2026-07-20T01:30:01Z"));
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+                .andExpect(jsonPath("$.data.attendanceStatus").value("ABSENT"));
 
-        clock.setInstant(Instant.parse("2026-07-20T08:30:00Z"));
+        clock.setInstant(Instant.parse("2026-07-20T06:00:00Z"));
         mockMvc.perform(clockOutRequest("10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.attendanceStatus").value("LATE"));
+                .andExpect(jsonPath("$.data.attendanceStatus").value("ABSENT"));
 
-        Long recordId = recordId(10L);
-        assertEquals(List.of(
-                "attendance:" + recordId + ":late:10:ATTENDANCE_ABNORMAL",
-                "attendance:" + recordId + ":early-leave:10:ATTENDANCE_ABNORMAL"
-        ), notificationPublisher.summaries());
+        assertEquals(List.of(), notificationPublisher.summaries());
     }
 
     @Test
-    void rejectsInvalidClockSequenceAndDuplicateClockIn() throws Exception {
-        mockMvc.perform(clockOutRequest("10"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value(40903));
-
+    void rejectsDuplicateMorningAndAfternoonClock() throws Exception {
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isOk());
         mockMvc.perform(clockInRequest("10"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value(40901));
 
-        assertEquals(1, operationLogs.count("CLOCK_OUT", "FAILURE"));
+        clock.setInstant(Instant.parse("2026-07-20T05:30:00Z"));
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isOk());
+        mockMvc.perform(clockOutRequest("10"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40902));
+
         assertEquals(1, operationLogs.count("CLOCK_IN", "SUCCESS"));
         assertEquals(1, operationLogs.count("CLOCK_IN", "FAILURE"));
+        assertEquals(1, operationLogs.count("CLOCK_OUT", "SUCCESS"));
+        assertEquals(1, operationLogs.count("CLOCK_OUT", "FAILURE"));
     }
 
     @Test

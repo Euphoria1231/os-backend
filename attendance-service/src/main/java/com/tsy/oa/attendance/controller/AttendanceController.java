@@ -51,7 +51,7 @@ public class AttendanceController {
             HttpServletRequest httpRequest
     ) {
         OperationLogContext context = logContext(
-                httpRequest, employeeId, "CLOCK_IN", "上班打卡"
+                httpRequest, employeeId, "CLOCK_IN", "上午打卡"
         );
         AttendanceRecordResponse response = operationLogger.execute(
                 context,
@@ -68,7 +68,7 @@ public class AttendanceController {
             HttpServletRequest httpRequest
     ) {
         OperationLogContext context = logContext(
-                httpRequest, employeeId, "CLOCK_OUT", "下班打卡"
+                httpRequest, employeeId, "CLOCK_OUT", "下午打卡"
         );
         AttendanceRecordResponse response = operationLogger.execute(
                 context,

@@ -26,6 +26,7 @@ public class AttendanceClockProperties {
     public void setMorningEndTime(LocalTime morningEndTime) { this.morningEndTime = morningEndTime; }
     public LocalTime getAfternoonStartTime() { return afternoonStartTime; }
     public void setAfternoonStartTime(LocalTime afternoonStartTime) { this.afternoonStartTime = afternoonStartTime; }
+    public LocalTime getAfternoonClockStartTime() { return afternoonStartTime.minusMinutes(30); }
     public LocalTime getWorkEndTime() { return workEndTime; }
     public void setWorkEndTime(LocalTime workEndTime) { this.workEndTime = workEndTime; }
     public int getLateThresholdMinutes() { return lateThresholdMinutes; }
