@@ -17,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SeedDataMigrationTests {
 
+    private static final String EMPLOYEE_TASK_PERMISSION_MIGRATION =
+            "sql/migrations/V20260724_06__grant_employee_approval_task_permissions.sql";
+
     private static final Pattern ROLE_PERMISSION_DELETE = Pattern.compile(
             "DELETE\\s+FROM\\s+role_api_permission\\s+"
                     + "WHERE\\s+role_id\\s*=\\s*2\\s+"
@@ -63,6 +66,24 @@ class SeedDataMigrationTests {
         Set<RolePermission> firstRun = Set.copyOf(permissions);
         applyRolePermissionSeed(sql, permissions);
         assertThat(permissions).isEqualTo(firstRun);
+    }
+
+    @Test
+    void employeeTaskPermissionMigrationGrantsReadAndApproveByStableCodes() throws IOException {
+        Path repositoryRoot = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        Path migrationScript = repositoryRoot.resolve(EMPLOYEE_TASK_PERMISSION_MIGRATION);
+        if (!Files.exists(migrationScript)) {
+            migrationScript = repositoryRoot.resolve("../" + EMPLOYEE_TASK_PERMISSION_MIGRATION)
+                    .normalize();
+        }
+
+        assertThat(migrationScript).exists();
+        String sql = Files.readString(migrationScript, StandardCharsets.UTF_8);
+
+        assertThat(sql).containsIgnoringCase("USE oa_user");
+        assertThat(sql).containsIgnoringCase("INSERT IGNORE INTO role_api_permission");
+        assertThat(sql).contains("r.code = 'EMPLOYEE'");
+        assertThat(sql).contains("'FLOW_TASK_READ'", "'FLOW_TASK_APPROVE'");
     }
 
     private List<String> findMatches(Pattern pattern, String sql) {
