@@ -11,7 +11,7 @@ public class AttendanceGeofenceProperties {
 
     private double centerLongitude = 119.411209;
     private double centerLatitude = 26.022543;
-    private int radiusMeters = 500;
+    private int radiusMeters = 1000;
 
     public double getCenterLongitude() { return centerLongitude; }
     public void setCenterLongitude(double centerLongitude) { this.centerLongitude = centerLongitude; }

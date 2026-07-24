@@ -35,4 +35,4 @@ attendance:
   geofence:
     center-longitude: 119.411209
     center-latitude: 26.022543
-    radius-meters: 500
+    radius-meters: 1000

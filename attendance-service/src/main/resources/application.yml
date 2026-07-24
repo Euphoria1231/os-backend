@@ -60,7 +60,7 @@ attendance:
   geofence:
     center-longitude: ${ATTENDANCE_CENTER_LONGITUDE:119.411209}
     center-latitude: ${ATTENDANCE_CENTER_LATITUDE:26.022543}
-    radius-meters: ${ATTENDANCE_RADIUS_METERS:500}
+    radius-meters: ${ATTENDANCE_RADIUS_METERS:1000}
 
 management:
   endpoints:

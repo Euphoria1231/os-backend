@@ -98,16 +98,16 @@ class AttendanceControllerTests {
                 .andExpect(jsonPath("$.data.afternoonEndTime").value("17:00"))
                 .andExpect(jsonPath("$.data.centerLongitude").value(119.411209))
                 .andExpect(jsonPath("$.data.centerLatitude").value(26.022543))
-                .andExpect(jsonPath("$.data.radiusMeters").value(500));
+                .andExpect(jsonPath("$.data.radiusMeters").value(1000));
     }
 
     @Test
     void acceptsClockInsideBoundaryAndRejectsClockOutsideBoundary() throws Exception {
         String outsideLocation =
-                "{\"longitude\":119.411209,\"latitude\":26.027040501139}";
+                "{\"longitude\":119.411209,\"latitude\":26.031545196841}";
         mockMvc.perform(clockInRequest(
                         "10",
-                        "{\"longitude\":119.411209,\"latitude\":26.027038702498}"
+                        "{\"longitude\":119.411209,\"latitude\":26.031527210434}"
                 ))
                 .andExpect(status().isOk());
 
