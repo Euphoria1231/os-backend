@@ -26,6 +26,8 @@ import java.util.Locale;
 @Service
 public class RbacService {
 
+    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
+
     private final RbacMapper rbacMapper;
     private final EmployeeMapper employeeMapper;
 
@@ -147,7 +149,10 @@ public class RbacService {
 
     @Transactional
     public void assignRolePermissions(Long roleId, RoleGrantRequest request) {
-        requireRole(roleId);
+        Role role = requireRole(roleId);
+        if (SUPER_ADMIN_ROLE_CODE.equals(role.getCode())) {
+            throw new BusinessException(UserErrorCode.SUPER_ADMIN_PERMISSIONS_IMMUTABLE);
+        }
         List<Long> menuIds = request.menuIds().stream().distinct().toList();
         List<Long> apiPermissionIds = request.apiPermissionIds().stream().distinct().toList();
         menuIds.forEach(this::requireMenu);

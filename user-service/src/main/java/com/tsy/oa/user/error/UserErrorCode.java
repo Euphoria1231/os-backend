@@ -18,7 +18,8 @@ public enum UserErrorCode implements ErrorCode {
     EMPLOYEE_NO_EXISTS(40903, "员工编号已存在"),
     USERNAME_EXISTS(40904, "登录账号已存在"),
     ROLE_CODE_EXISTS(40905, "角色编码已存在"),
-    API_PERMISSION_CODE_EXISTS(40906, "接口权限编码已存在");
+    API_PERMISSION_CODE_EXISTS(40906, "接口权限编码已存在"),
+    SUPER_ADMIN_PERMISSIONS_IMMUTABLE(40907, "超级管理员始终拥有全部权限，不允许覆盖授权");
 
     private final int code;
     private final String message;

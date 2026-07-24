@@ -128,6 +128,43 @@ class RbacControllerTests {
     }
 
     @Test
+    void rejectsReplacingSuperAdminPermissionsAndPreservesCurrentGrant() throws Exception {
+        long roleId = createAndReadId("/api/user/roles", roleJson("SUPER_ADMIN", "超级管理员"));
+        long menuId = createAndReadId("/api/user/menus", menuJson("员工管理", "/employees"));
+        long apiPermissionId = createAndReadId(
+                "/api/user/api-permissions",
+                apiPermissionJson("USER_EMPLOYEE_READ", "GET", "/api/user/employees/**")
+        );
+        jdbcTemplate.update("INSERT INTO role_menu (role_id, menu_id) VALUES (?, ?)", roleId, menuId);
+        jdbcTemplate.update(
+                "INSERT INTO role_api_permission (role_id, api_permission_id) VALUES (?, ?)",
+                roleId,
+                apiPermissionId
+        );
+
+        mockMvc.perform(put("/api/user/roles/{id}/permissions", roleId)
+                        .header("X-Employee-Id", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RoleGrantPayload(List.of(), List.of()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(40907))
+                .andExpect(jsonPath("$.message").value("超级管理员始终拥有全部权限，不允许覆盖授权"));
+
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM role_menu WHERE role_id = ? AND menu_id = ?",
+                Integer.class,
+                roleId,
+                menuId
+        ));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM role_api_permission WHERE role_id = ? AND api_permission_id = ?",
+                Integer.class,
+                roleId,
+                apiPermissionId
+        ));
+    }
+
+    @Test
     void returnsCurrentRoleGrantIds() throws Exception {
         long roleId = createAndReadId("/api/user/roles", roleJson("ADMIN", "系统管理员"));
         long menuId = createAndReadId("/api/user/menus", menuJson("员工管理", "/employees"));
