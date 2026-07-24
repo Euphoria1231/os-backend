@@ -11,12 +11,21 @@ import org.springframework.stereotype.Service;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class AttendanceAnalysisService {
+    private static final Map<String, String> ATTENDANCE_STATUS_LABELS = Map.of(
+            "ABSENT", "缺勤",
+            "EARLY_LEAVE", "早退",
+            "LATE", "迟到",
+            "MISSING_CLOCK_IN", "上午缺卡",
+            "MISSING_CLOCK_OUT", "下午缺卡"
+    );
+
     private final AttendanceAnalysisSource source;
     private final AiAnalysisService aiAnalysisService;
 
@@ -41,13 +50,42 @@ public class AttendanceAnalysisService {
                 .collect(Collectors.groupingBy(AttendanceSourceRecord::attendanceStatus, Collectors.counting()));
         long count = abnormalities.values().stream().mapToLong(Long::longValue).sum();
         String risk = count == 0 ? "LOW" : count == 1 ? "LOW" : count <= 3 ? "MEDIUM" : "HIGH";
-        String summary = abnormalities.isEmpty() ? "未发现来源接口返回的明确异常状态。" : "明确异常：" + abnormalities;
+        String summary = buildAbnormalSummary(abnormalities);
         AiAnalysisAuditResult analysis = aiAnalysisService.analyzeAndRecord(new AiAnalysisRequest("ATTENDANCE", targetEmployeeId + "-" + month, requesterId,
-                "仅基于明确考勤状态给出改进建议：" + summary));
+                "仅基于明确考勤状态给出改进建议：" + summary
+                        + "请使用纯文本，每条建议单独一行，不要使用 Markdown 标记或列表编号。"));
         AiCallResult result = analysis.result();
-        List<String> suggestions = result.status().name().equals("SUCCESS") ? List.of(result.displayText())
+        List<String> suggestions = result.status().name().equals("SUCCESS") ? plainTextParagraphs(result.displayText())
                 : List.of("仅供参考：请核对迟到、缺卡等来源记录并按制度补正。" );
         return new AttendanceAnalysisResponse(analysis.analysisId(), result.status(), targetEmployeeId, month, risk, summary, suggestions, "仅供参考");
+    }
+
+    private String buildAbnormalSummary(Map<String, Long> abnormalities) {
+        if (abnormalities.isEmpty()) {
+            return "未发现来源接口返回的明确异常状态。";
+        }
+        String details = abnormalities.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> ATTENDANCE_STATUS_LABELS.getOrDefault(entry.getKey(), "其他异常")
+                        + " " + entry.getValue() + " 次")
+                .collect(Collectors.joining("、"));
+        return "明确异常：" + details + "。";
+    }
+
+    private List<String> plainTextParagraphs(String text) {
+        List<String> paragraphs = Arrays.stream(text
+                        .replaceAll("[ \\t]+(?=[1-9][.)、]\\s*)", "\n")
+                        .split("\\R+"))
+                .map(String::trim)
+                .map(paragraph -> paragraph.replaceFirst("^#{1,6}\\s*", ""))
+                .map(paragraph -> paragraph.replaceFirst("^(?:[-*+]\\s+|[1-9][.)、]\\s*)", ""))
+                .map(paragraph -> paragraph.replaceAll("\\[([^\\]]+)]\\([^)]+\\)", "$1"))
+                .map(paragraph -> paragraph.replaceAll("[*_`~]", "").trim())
+                .filter(paragraph -> !paragraph.isBlank())
+                .toList();
+        return paragraphs.isEmpty()
+                ? List.of("仅供参考：请核对迟到、缺卡等来源记录并按制度补正。")
+                : paragraphs;
     }
 
     private YearMonth parseMonth(String month) {

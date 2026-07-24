@@ -95,8 +95,8 @@ class Task6IntelligenceAnalysisTests {
     void attendanceAnalysisUsesOnlyReturnedExplicitAbnormalStatusesAndValidatesMonth() {
         AttendanceAnalysisService service = new AttendanceAnalysisService(
                 (requesterId, targetEmployeeId, startDate, endDate) -> List.of(
-                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 2), "LATE"),
-                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 3), "MISSING_CLOCK_OUT")
+                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 2), "ABSENT"),
+                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 3), "LATE")
                 ),
                 failingAiAnalysisService()
         );
@@ -104,11 +104,31 @@ class Task6IntelligenceAnalysisTests {
         AttendanceAnalysisResponse response = service.analyze(10L, 20L, "2026-07");
 
         assertThat(response.riskLevel()).isEqualTo("MEDIUM");
-        assertThat(response.abnormalSummary()).contains("LATE", "MISSING_CLOCK_OUT");
+        assertThat(response.abnormalSummary()).isEqualTo("明确异常：缺勤 1 次、迟到 1 次。");
+        assertThat(response.abnormalSummary()).doesNotContain("ABSENT", "LATE");
         assertThatThrownBy(() -> service.analyze(10L, 20L, "2026-7"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).errorCode())
                 .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void attendanceAnalysisReturnsPlainTextSuggestionParagraphs() {
+        AttendanceAnalysisService service = new AttendanceAnalysisService(
+                (requesterId, targetEmployeeId, startDate, endDate) -> List.of(
+                        new AttendanceSourceRecord(targetEmployeeId, LocalDate.of(2026, 7, 2), "ABSENT")
+                ),
+                analysisService(AiCallStatus.SUCCESS,
+                        "以下是建议： 1. **核实缺勤原因**：确认是否存在漏打卡。 2. `补办手续`：按制度提交申请。")
+        );
+
+        AttendanceAnalysisResponse response = service.analyze(10L, 20L, "2026-07");
+
+        assertThat(response.improvementSuggestions()).containsExactly(
+                "仅供参考：以下是建议：",
+                "核实缺勤原因：确认是否存在漏打卡。",
+                "补办手续：按制度提交申请。"
+        );
     }
 
     @Test
